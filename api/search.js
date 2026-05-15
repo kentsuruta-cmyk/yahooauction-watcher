@@ -17,18 +17,14 @@ const MODELS = [
   { name: 'PSP 3000', query: 'PSP-3000 本体', excludeWords: [] },
 ];
 
-const JUNK_WORDS = ['ジャンク', '動作未確認', '不動品', '動作不良'];
-const USED_WORDS = ['動作品', '稼働品', '動作確認済', '動作確認済み'];
+// istatus: 2=目立った傷なし 3=やや傷あり 4=傷あり 5=状態が悪い
+const SEARCH_TYPES = [
+  { status: '中古', istatus: '2,3' },
+  { status: 'ジャンク', istatus: '3,4,5' },
+];
 
-function judgeStatus(title) {
-  const t = title;
-  if (JUNK_WORDS.some(w => t.includes(w))) return 'ジャンク';
-  if (USED_WORDS.some(w => t.includes(w))) return '中古';
-  return '要確認';
-}
-
-async function searchYahooAuction(query) {
-  const url = `https://auctions.yahoo.co.jp/search/search?p=${encodeURIComponent(query)}&order=time&f=0x2`;
+async function searchYahooAuction(query, istatus) {
+  const url = `https://auctions.yahoo.co.jp/search/search?p=${encodeURIComponent(query)}&istatus=${istatus}&order=time&f=0x2&ei=UTF-8&tab_ex=commerce`;
   const res = await fetch(url, {
     headers: {
       'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/120.0.0.0 Safari/537.36',
@@ -42,13 +38,8 @@ async function searchYahooAuction(query) {
   $('li.Product').each((_, el) => {
     const title = $(el).find('.Product__title').text().trim();
     const link = $(el).find('a.Product__titleLink').attr('href') || '';
-    const priceText = $(el).find('.Product__price').text().trim().replace(/[^0-9]/g, '');
+    const priceText = $(el).find('.Product__priceValue').text().trim().replace(/[^0-9]/g, '');
     const endTimeText = $(el).find('.Product__time').text().trim();
-    const condition =
-      $(el).find('.Product__condition').text().trim() ||
-      $(el).find('[class*="condition"]').text().trim() ||
-      $(el).find('[class*="Condition"]').text().trim() ||
-      '';
 
     if (!title || !link) return;
 
@@ -57,7 +48,6 @@ async function searchYahooAuction(query) {
       link,
       price: priceText || '不明',
       endTime: endTimeText,
-      condition,
     });
   });
 
@@ -72,29 +62,30 @@ module.exports = async (req, res) => {
     const seen = new Set();
 
     for (const model of MODELS) {
-      try {
-        const items = await searchYahooAuction(model.query);
-        for (const item of items) {
-          if (seen.has(item.link)) continue;
+      for (const searchType of SEARCH_TYPES) {
+        try {
+          const items = await searchYahooAuction(model.query, searchType.istatus);
+          for (const item of items) {
+            if (seen.has(item.link)) continue;
 
-          const excluded = model.excludeWords.some(w =>
-            item.title.toLowerCase().includes(w.toLowerCase())
-          );
-          if (excluded) continue;
+            const excluded = model.excludeWords.some(w =>
+              item.title.toLowerCase().includes(w.toLowerCase())
+            );
+            if (excluded) continue;
 
-          seen.add(item.link);
-          results.push({
-            model: model.name,
-            title: item.title,
-            link: item.link,
-            price: item.price,
-            endTime: item.endTime,
-            status: judgeStatus(item.title),
-            condition: item.condition,
-          });
+            seen.add(item.link);
+            results.push({
+              model: model.name,
+              title: item.title,
+              link: item.link,
+              price: item.price,
+              endTime: item.endTime,
+              status: searchType.status,
+            });
+          }
+        } catch (e) {
+          console.error(`Error for ${model.query} / istatus=${searchType.istatus}:`, e.message);
         }
-      } catch (e) {
-        console.error(`Error for ${model.query}:`, e.message);
       }
     }
 
