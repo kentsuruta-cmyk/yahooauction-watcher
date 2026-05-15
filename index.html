@@ -5,35 +5,35 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>KENJAGAMES // Yahoo Auction Watcher</title>
   <style>
-    * { margin: 0; padding: 0; box-sizing: border-box; }
-    body { background: #0a0a0a; color: #ffffff; font-family: 'Courier New', monospace; }
-    header { padding: 20px 40px; border-bottom: 1px solid #333; }
-    header h1 { color: #ff2d6b; font-size: 20px; letter-spacing: 2px; }
-    header p { color: #888; font-size: 12px; margin-top: 4px; }
-    .container { max-width: 1000px; margin: 40px auto; padding: 0 20px; }
-    .card { background: #141414; border: 1px solid #2a2a2a; border-radius: 8px; padding: 30px; margin-bottom: 20px; }
-    .card h2 { color: #00ff88; font-size: 13px; letter-spacing: 3px; margin-bottom: 20px; }
-    .search-btn { width: 100%; background: #ff2d6b; border: none; color: #fff; padding: 14px; border-radius: 4px; font-size: 14px; letter-spacing: 2px; cursor: pointer; font-family: 'Courier New', monospace; transition: background 0.2s; }
-    .search-btn:hover { background: #e0255f; }
-    .search-btn:disabled { background: #444; cursor: not-allowed; }
-    .results-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 16px; }
-    .results-header span { color: #888; font-size: 12px; }
-    .filter-btns { display: flex; gap: 8px; margin-bottom: 16px; flex-wrap: wrap; }
-    .filter-btn { background: #0a0a0a; border: 1px solid #333; color: #888; padding: 6px 14px; border-radius: 4px; cursor: pointer; font-size: 12px; font-family: 'Courier New', monospace; transition: all 0.2s; }
-    .filter-btn.active { background: #00ff88; border-color: #00ff88; color: #000; font-weight: bold; }
-    table { width: 100%; border-collapse: collapse; font-size: 13px; }
-    th { color: #00ff88; text-align: left; padding: 10px 12px; border-bottom: 1px solid #2a2a2a; font-size: 11px; letter-spacing: 1px; }
-    td { padding: 10px 12px; border-bottom: 1px solid #1a1a1a; color: #ccc; vertical-align: top; }
-    tr:hover td { background: #1a1a1a; }
-    td a { color: #00ff88; text-decoration: none; }
-    td a:hover { text-decoration: underline; }
-    .badge { font-size: 10px; padding: 2px 8px; border-radius: 3px; font-weight: bold; display: inline-block; }
-    .badge-used { background: #00ff88; color: #000; }
-    .badge-junk { background: #ff2d6b; color: #fff; }
-    .badge-check { background: #ffaa00; color: #000; }
-    .status { text-align: center; padding: 40px; color: #888; font-size: 13px; }
-    .progress { color: #00ff88; font-size: 12px; text-align: center; padding: 20px; }
-    .end-soon { color: #ff2d6b; font-weight: bold; }
+   * { margin: 0; padding: 0; box-sizing: border-box; }
+body { background: #f5f5f5; color: #111; font-family: 'Courier New', monospace; }
+header { padding: 20px 40px; border-bottom: 1px solid #ddd; background: #fff; }
+header h1 { color: #e0003c; font-size: 20px; letter-spacing: 2px; }
+header p { color: #888; font-size: 12px; margin-top: 4px; }
+.container { max-width: 1000px; margin: 40px auto; padding: 0 20px; }
+.card { background: #fff; border: 1px solid #e0e0e0; border-radius: 8px; padding: 30px; margin-bottom: 20px; }
+.card h2 { color: #e0003c; font-size: 13px; letter-spacing: 3px; margin-bottom: 20px; }
+.search-btn { width: 100%; background: #e0003c; border: none; color: #fff; padding: 14px; border-radius: 4px; font-size: 14px; letter-spacing: 2px; cursor: pointer; font-family: 'Courier New', monospace; transition: background 0.2s; }
+.search-btn:hover { background: #c0002e; }
+.search-btn:disabled { background: #ccc; cursor: not-allowed; }
+.results-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 16px; }
+.results-header span { color: #888; font-size: 12px; }
+.filter-btns { display: flex; gap: 8px; margin-bottom: 16px; flex-wrap: wrap; }
+.filter-btn { background: #f5f5f5; border: 1px solid #ddd; color: #555; padding: 6px 14px; border-radius: 4px; cursor: pointer; font-size: 12px; font-family: 'Courier New', monospace; transition: all 0.2s; }
+.filter-btn.active { background: #e0003c; border-color: #e0003c; color: #fff; font-weight: bold; }
+table { width: 100%; border-collapse: collapse; font-size: 13px; }
+th { color: #e0003c; text-align: left; padding: 10px 12px; border-bottom: 2px solid #e0e0e0; font-size: 11px; letter-spacing: 1px; }
+td { padding: 10px 12px; border-bottom: 1px solid #f0f0f0; color: #333; vertical-align: top; }
+tr:hover td { background: #fafafa; }
+td a { color: #e0003c; text-decoration: none; }
+td a:hover { text-decoration: underline; }
+.badge { font-size: 10px; padding: 2px 8px; border-radius: 3px; font-weight: bold; display: inline-block; }
+.badge-used { background: #00aa55; color: #fff; }
+.badge-junk { background: #e0003c; color: #fff; }
+.badge-check { background: #ffaa00; color: #000; }
+.status { text-align: center; padding: 40px; color: #888; font-size: 13px; }
+.progress { color: #e0003c; font-size: 12px; text-align: center; padding: 20px; }
+.end-soon { color: #e0003c; font-weight: bold; }
   </style>
 </head>
 <body>
