@@ -73,19 +73,10 @@ td a:hover { text-decoration: underline; }
     let allItems = [];
     let currentFilter = 'all';
 
-    function timeRemaining(endTimeStr) {
-      if (!endTimeStr) return '不明';
-      const end = new Date(endTimeStr);
-      const now = new Date();
-      const diff = end - now;
-      if (diff < 0) return '終了';
-      const hours = Math.floor(diff / 3600000);
-      const minutes = Math.floor((diff % 3600000) / 60000);
-      if (hours < 2) return `<span class="end-soon">残り${hours}時間${minutes}分</span>`;
-      if (hours < 24) return `残り${hours}時間${minutes}分`;
-      const days = Math.floor(hours / 24);
-      return `残り${days}日`;
-    }
+function timeRemaining(endTimeStr) {
+  if (!endTimeStr) return '不明';
+  return endTimeStr;
+}
 
     function getBadge(status) {
       if (status === '中古') return '<span class="badge badge-used">中古</span>';
