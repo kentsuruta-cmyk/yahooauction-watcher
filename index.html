@@ -1,11 +1,11 @@
 <!DOCTYPE html>
 <html lang="ja">
 <head>
-  <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>KENJAGAMES // Yahoo Auction Watcher</title>
-  <style>
-   * { margin: 0; padding: 0; box-sizing: border-box; }
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>KENJAGAMES // Yahoo Auction Watcher</title>
+<style>
+* { margin: 0; padding: 0; box-sizing: border-box; }
 body { background: #f5f5f5; color: #111; font-family: 'Courier New', monospace; }
 header { padding: 20px 40px; border-bottom: 1px solid #ddd; background: #fff; }
 header h1 { color: #e0003c; font-size: 20px; letter-spacing: 2px; }
@@ -34,121 +34,114 @@ td a:hover { text-decoration: underline; }
 .status { text-align: center; padding: 40px; color: #888; font-size: 13px; }
 .progress { color: #e0003c; font-size: 12px; text-align: center; padding: 20px; }
 .end-soon { color: #e0003c; font-weight: bold; }
-  </style>
+</style>
 </head>
 <body>
-  <header>
-    <h1>KENJAGAMES // Yahoo Auction Watcher</h1>
-    <p>ヤフオク新着ゲーム機モニタリングツール</p>
-  </header>
-
-  <div class="container">
-    <div class="card">
-      <h2>▸ MONITOR CONFIG</h2>
-      <p style="color:#888; font-size:12px; margin-bottom:16px;">
-        監視対象：GBC / GBP / GBA / GBA SP / DS / DS Lite / DSi / DSi LL / 3DS / 3DS LL / PSP 1000・2000・3000
-      </p>
-      <button class="search-btn" id="searchBtn" onclick="startSearch()">🔍 新着を検索する</button>
-    </div>
-
-    <div class="card" id="resultsCard" style="display:none;">
-      <div class="results-header">
-        <h2>▸ RESULTS</h2>
-        <span id="resultCount"></span>
-      </div>
-
-      <div class="filter-btns">
-        <button class="filter-btn active" data-filter="all" onclick="setFilter('all', this)">すべて</button>
-        <button class="filter-btn" data-filter="中古" onclick="setFilter('中古', this)">中古のみ</button>
-        <button class="filter-btn" data-filter="ジャンク" onclick="setFilter('ジャンク', this)">ジャンクのみ</button>
-        <button class="filter-btn" data-filter="要確認" onclick="setFilter('要確認', this)">要確認のみ</button>
-      </div>
-
-      <div id="progressLog"></div>
-      <div id="resultsBody"></div>
-    </div>
-  </div>
-
-  <script>
-    let allItems = [];
-    let currentFilter = 'all';
+<header>
+<h1>KENJAGAMES // Yahoo Auction Watcher</h1>
+<p>ヤフオク新着ゲーム機モニタリングツール</p>
+</header>
+<div class="container">
+<div class="card">
+<h2>▸ MONITOR CONFIG</h2>
+<p style="color:#888; font-size:12px; margin-bottom:16px;">
+監視対象：GBC / GBP / GBA / GBA SP / DS / DS Lite / DSi / DSi LL / 3DS / 3DS LL / PSP 1000・2000・3000
+</p>
+<button class="search-btn" id="searchBtn" onclick="startSearch()">🔍 新着を検索する</button>
+</div>
+<div class="card" id="resultsCard" style="display:none;">
+<div class="results-header">
+<h2>▸ RESULTS</h2>
+<span id="resultCount"></span>
+</div>
+<div class="filter-btns">
+<button class="filter-btn active" data-filter="all" onclick="setFilter('all', this)">すべて</button>
+<button class="filter-btn" data-filter="中古" onclick="setFilter('中古', this)">中古のみ</button>
+<button class="filter-btn" data-filter="ジャンク" onclick="setFilter('ジャンク', this)">ジャンクのみ</button>
+</div>
+<div id="progressLog"></div>
+<div id="resultsBody"></div>
+</div>
+</div>
+<script>
+let allItems = [];
+let currentFilter = 'all';
 
 function timeRemaining(endTimeStr) {
   if (!endTimeStr) return '不明';
   return endTimeStr;
 }
 
-    function getBadge(status) {
-      if (status === '中古') return '<span class="badge badge-used">中古</span>';
-      if (status === 'ジャンク') return '<span class="badge badge-junk">ジャンク</span>';
-      return '<span class="badge badge-check">要確認</span>';
-    }
+function getBadge(status) {
+  if (status === '中古') return '<span class="badge badge-used">中古</span>';
+  if (status === 'ジャンク') return '<span class="badge badge-junk">ジャンク</span>';
+  return '<span class="badge badge-check">要確認</span>';
+}
 
-    function renderTable(items) {
-      const filtered = currentFilter === 'all' ? items : items.filter(i => i.status === currentFilter);
-      document.getElementById('resultCount').textContent = `${filtered.length} 件表示 / 全${items.length}件`;
+function renderTable(items) {
+  const filtered = currentFilter === 'all' ? items : items.filter(i => i.status === currentFilter);
+  document.getElementById('resultCount').textContent = `${filtered.length} 件表示 / 全${items.length}件`;
 
-      if (filtered.length === 0) {
-        document.getElementById('resultsBody').innerHTML = '<div class="status">該当する商品が見つかりませんでした</div>';
-        return;
-      }
+  if (filtered.length === 0) {
+    document.getElementById('resultsBody').innerHTML = '<div class="status">該当する商品が見つかりませんでした</div>';
+    return;
+  }
 
-      document.getElementById('resultsBody').innerHTML = `
-        <table>
-          <thead>
-            <tr>
-              <th>機種</th>
-              <th>商品名</th>
-              <th>状態</th>
-              <th>現在価格</th>
-              <th>残り時間</th>
-            </tr>
-          </thead>
-          <tbody>
-            ${filtered.map(item => `
-              <tr>
-                <td>${item.model}</td>
-                <td><a href="${item.link}" target="_blank">${item.title}</a></td>
-                <td>${getBadge(item.status)}</td>
-                <td>¥${Number(item.price).toLocaleString() || item.price}</td>
-                <td>${timeRemaining(item.endTime)}</td>
-              </tr>
-            `).join('')}
-          </tbody>
-        </table>`;
-    }
+  document.getElementById('resultsBody').innerHTML = `
+<table>
+<thead>
+<tr>
+<th>機種</th>
+<th>商品名</th>
+<th>状態</th>
+<th>現在価格</th>
+<th>残り時間</th>
+</tr>
+</thead>
+<tbody>
+${filtered.map(item => `
+<tr>
+<td>${item.model}</td>
+<td><a href="${item.link}" target="_blank">${item.title}</a></td>
+<td>${getBadge(item.status)}</td>
+<td>¥${Number(item.price).toLocaleString() || item.price}</td>
+<td>${timeRemaining(item.endTime)}</td>
+</tr>
+`).join('')}
+</tbody>
+</table>`;
+}
 
-    function setFilter(filter, btn) {
-      currentFilter = filter;
-      document.querySelectorAll('.filter-btn').forEach(b => b.classList.remove('active'));
-      btn.classList.add('active');
-      renderTable(allItems);
-    }
+function setFilter(filter, btn) {
+  currentFilter = filter;
+  document.querySelectorAll('.filter-btn').forEach(b => b.classList.remove('active'));
+  btn.classList.add('active');
+  renderTable(allItems);
+}
 
-    async function startSearch() {
-      const btn = document.getElementById('searchBtn');
-      btn.disabled = true;
-      btn.textContent = '⏳ 検索中...';
+async function startSearch() {
+  const btn = document.getElementById('searchBtn');
+  btn.disabled = true;
+  btn.textContent = '⏳ 検索中...';
+  const resultsCard = document.getElementById('resultsCard');
+  const progressLog = document.getElementById('progressLog');
+  resultsCard.style.display = 'block';
+  progressLog.innerHTML = '<div class="progress">ヤフオクから新着を取得中...</div>';
+  document.getElementById('resultsBody').innerHTML = '';
 
-      const resultsCard = document.getElementById('resultsCard');
-      const progressLog = document.getElementById('progressLog');
-      resultsCard.style.display = 'block';
-      progressLog.innerHTML = '<div class="progress">ヤフオクから新着を取得中...</div>';
-      document.getElementById('resultsBody').innerHTML = '';
+  try {
+    const res = await fetch('/api/search');
+    const data = await res.json();
+    allItems = data.items || [];
+    progressLog.innerHTML = '';
+    renderTable(allItems);
+  } catch (e) {
+    progressLog.innerHTML = '<div class="status" style="color:#e0003c;">エラーが発生しました。もう一度お試しください。</div>';
+  }
 
-      try {
-        const res = await fetch('/api/search');
-        const data = await res.json();
-        allItems = data.items || [];
-        progressLog.innerHTML = '';
-        renderTable(allItems);
-      } catch (e) {
-        progressLog.innerHTML = '<div class="status" style="color:#ff2d6b;">エラーが発生しました。もう一度お試しください。</div>';
-      }
-
-      btn.disabled = false;
-      btn.textContent = '🔍 新着を検索する';
-    }
-  </script>
+  btn.disabled = false;
+  btn.textContent = '🔍 新着を検索する';
+}
+</script>
 </body>
 </html>
