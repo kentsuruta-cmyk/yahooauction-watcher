@@ -18,7 +18,7 @@ const MODELS = [
 ];
 
 const JUNK_WORDS = ['ジャンク', '動作未確認', '不動品', '動作不良'];
-const USED_WORDS = ['動作品', '稼働品', '動作確認済'];
+const USED_WORDS = ['動作品', '稼働品', '動作確認済', '動作確認済み'];
 
 function judgeStatus(title) {
   const t = title;
