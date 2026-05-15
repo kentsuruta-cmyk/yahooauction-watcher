@@ -1,154 +1,55 @@
 const fetch = require('node-fetch');
-const xml2js = require('xml2js');
+const cheerio = require('cheerio');
 
 const MODELS = [
-  {
-    name: 'ゲームボーイカラー',
-    keywords: ['ゲームボーイカラー', 'GBC'],
-    suffix: '本体',
-    junkOk: true,
-    junkWords: ['ジャンク', '動作未確認', '不動品', '動作不良'],
-    usedWords: ['動作品', '稼働品', '動作確認済', '動作確認済み'],
-    excludeWords: [],
-  },
-  {
-    name: 'ゲームボーイポケット',
-    keywords: ['ゲームボーイポケット', 'GBP'],
-    suffix: '本体',
-    junkOk: true,
-    junkWords: ['ジャンク', '動作未確認', '不動品', '動作不良'],
-    usedWords: ['動作品', '稼働品', '動作確認済', '動作確認済み'],
-    excludeWords: [],
-  },
-  {
-    name: 'ゲームボーイアドバンス',
-    keywords: ['ゲームボーイアドバンス', 'GBA'],
-    suffix: '本体',
-    junkOk: true,
-    junkWords: ['ジャンク', '動作未確認', '不動品', '動作不良'],
-    usedWords: ['動作品', '稼働品', '動作確認済', '動作確認済み'],
-    excludeWords: ['SP', 'アドバンスSP'],
-  },
-  {
-    name: 'ゲームボーイアドバンスSP',
-    keywords: ['ゲームボーイアドバンス SP', 'GBA SP'],
-    suffix: '本体',
-    junkOk: true,
-    junkWords: ['ジャンク', '動作未確認', '不動品', '動作不良'],
-    usedWords: ['動作品', '稼働品', '動作確認済', '動作確認済み'],
-    excludeWords: [],
-  },
-  {
-    name: 'DS',
-    keywords: ['初代DS', 'ニンテンドーDS'],
-    suffix: '本体',
-    junkOk: false,
-    junkWords: ['ジャンク', '動作未確認', '不動品', '動作不良'],
-    usedWords: ['動作品', '稼働品', '動作確認済', '動作確認済み'],
-    excludeWords: ['Lite', 'DSi', 'LL'],
-  },
-  {
-    name: 'DS Lite',
-    keywords: ['DS Lite', 'DSLite'],
-    suffix: '本体',
-    junkOk: false,
-    junkWords: ['ジャンク', '動作未確認', '不動品', '動作不良'],
-    usedWords: ['動作品', '稼働品', '動作確認済', '動作確認済み'],
-    excludeWords: ['ヤケ', '黄ばみ', '黄変'],
-  },
-  {
-    name: 'DSi',
-    keywords: ['DSi'],
-    suffix: '本体',
-    junkOk: false,
-    junkWords: ['ジャンク', '動作未確認', '不動品', '動作不良'],
-    usedWords: ['動作品', '稼働品', '動作確認済', '動作確認済み'],
-    excludeWords: ['LL'],
-  },
-  {
-    name: 'DSi LL',
-    keywords: ['DSi LL', 'DSiLL'],
-    suffix: '本体',
-    junkOk: false,
-    junkWords: ['ジャンク', '動作未確認', '不動品', '動作不良'],
-    usedWords: ['動作品', '稼働品', '動作確認済', '動作確認済み'],
-    excludeWords: [],
-  },
-  {
-    name: '3DS',
-    keywords: ['3DS'],
-    suffix: '本体',
-    junkOk: false,
-    junkWords: ['ジャンク', '動作未確認', '不動品', '動作不良'],
-    usedWords: ['動作品', '稼働品', '動作確認済', '動作確認済み'],
-    excludeWords: ['LL'],
-  },
-  {
-    name: '3DS LL',
-    keywords: ['3DS LL', '3DSLL'],
-    suffix: '本体',
-    junkOk: false,
-    junkWords: ['ジャンク', '動作未確認', '不動品', '動作不良'],
-    usedWords: ['動作品', '稼働品', '動作確認済', '動作確認済み'],
-    excludeWords: [],
-  },
-  {
-    name: 'PSP 1000',
-    keywords: ['PSP1000', 'PSP-1000', 'PSP 1000'],
-    suffix: '',
-    junkOk: false,
-    junkWords: ['ジャンク', '動作未確認', '不動品', '動作不良'],
-    usedWords: ['動作品', '稼働品', '動作確認済', '動作確認済み'],
-    excludeWords: ['ヤケ', '黄ばみ', '黄変'],
-  },
-  {
-    name: 'PSP 2000',
-    keywords: ['PSP2000', 'PSP-2000', 'PSP 2000'],
-    suffix: '',
-    junkOk: false,
-    junkWords: ['ジャンク', '動作未確認', '不動品', '動作不良'],
-    usedWords: ['動作品', '稼働品', '動作確認済', '動作確認済み'],
-    excludeWords: ['ヤケ', '黄ばみ', '黄変'],
-  },
-  {
-    name: 'PSP 3000',
-    keywords: ['PSP3000', 'PSP-3000', 'PSP 3000'],
-    suffix: '',
-    junkOk: false,
-    junkWords: ['ジャンク', '動作未確認', '不動品', '動作不良'],
-    usedWords: ['動作品', '稼働品', '動作確認済', '動作確認済み'],
-    excludeWords: ['ヤケ', '黄ばみ', '黄変'],
-  },
+  { name: 'ゲームボーイカラー', query: 'ゲームボーイカラー 本体', excludeWords: [] },
+  { name: 'ゲームボーイポケット', query: 'ゲームボーイポケット 本体', excludeWords: [] },
+  { name: 'ゲームボーイアドバンス', query: 'ゲームボーイアドバンス 本体', excludeWords: ['SP'] },
+  { name: 'ゲームボーイアドバンスSP', query: 'ゲームボーイアドバンスSP 本体', excludeWords: [] },
+  { name: 'DS', query: 'ニンテンドーDS 本体', excludeWords: ['Lite', 'DSi', 'LL'] },
+  { name: 'DS Lite', query: 'DS Lite 本体', excludeWords: [] },
+  { name: 'DSi', query: 'DSi 本体', excludeWords: ['LL'] },
+  { name: 'DSi LL', query: 'DSi LL 本体', excludeWords: [] },
+  { name: '3DS', query: '3DS 本体', excludeWords: ['LL'] },
+  { name: '3DS LL', query: '3DS LL 本体', excludeWords: [] },
+  { name: 'PSP 1000', query: 'PSP-1000 本体', excludeWords: [] },
+  { name: 'PSP 2000', query: 'PSP-2000 本体', excludeWords: [] },
+  { name: 'PSP 3000', query: 'PSP-3000 本体', excludeWords: [] },
 ];
 
-function judgeItem(title, description, model) {
-  const text = (title + ' ' + (description || '')).toLowerCase();
+const JUNK_WORDS = ['ジャンク', '動作未確認', '不動品', '動作不良'];
+const USED_WORDS = ['動作品', '稼働品', '動作確認済'];
 
-  // Check exclude words
-  for (const word of model.excludeWords) {
-    if (text.includes(word.toLowerCase())) return null;
-  }
-
-  // Check junk
-  const isJunk = model.junkWords.some(w => text.includes(w.toLowerCase()));
-  if (isJunk && !model.junkOk) return null;
-  if (isJunk) return 'ジャンク';
-
-  // Check used
-  const isUsed = model.usedWords.some(w => text.includes(w.toLowerCase()));
-  if (isUsed) return '中古';
-
+function judgeStatus(title) {
+  const t = title;
+  if (JUNK_WORDS.some(w => t.includes(w))) return 'ジャンク';
+  if (USED_WORDS.some(w => t.includes(w))) return '中古';
   return '要確認';
 }
 
-async function fetchRSS(keyword) {
-  const url = `https://auctions.yahoo.co.jp/rss/search?p=${encodeURIComponent(keyword)}&auccat=0&va=${encodeURIComponent(keyword)}&vo=&ve=&fixed=0&new=1`;
+async function searchYahooAuction(query) {
+  const url = `https://auctions.yahoo.co.jp/search/search?p=${encodeURIComponent(query)}&order=time&f=0x2`;
   const res = await fetch(url, {
-    headers: { 'User-Agent': 'Mozilla/5.0' }
+    headers: {
+      'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/120.0.0.0 Safari/537.36',
+      'Accept-Language': 'ja,en;q=0.9',
+    }
   });
-  const xml = await res.text();
-  const parsed = await xml2js.parseStringPromise(xml);
-  const items = parsed?.rss?.channel?.[0]?.item || [];
+  const html = await res.text();
+  const $ = cheerio.load(html);
+  const items = [];
+
+  $('li.Product').each((_, el) => {
+    const title = $(el).find('.Product__title').text().trim();
+    const link = $(el).find('a.Product__titleLink').attr('href') || '';
+    const priceText = $(el).find('.Product__price').text().trim().replace(/[^0-9]/g, '');
+    const endTimeText = $(el).find('.Product__time').text().trim();
+
+    if (!title || !link) return;
+
+    items.push({ title, link, price: priceText || '不明', endTime: endTimeText });
+  });
+
   return items;
 }
 
@@ -160,35 +61,28 @@ module.exports = async (req, res) => {
     const seen = new Set();
 
     for (const model of MODELS) {
-      for (const keyword of model.keywords) {
-        const query = model.suffix ? `${keyword} ${model.suffix}` : keyword;
-        try {
-          const items = await fetchRSS(query);
-          for (const item of items) {
-            const title = item.title?.[0] || '';
-            const link = item.link?.[0] || '';
-            const price = item['auction:current_price']?.[0] || item['auc:currentprice']?.[0] || '不明';
-            const endTime = item['auction:end_time']?.[0] || item['auc:endtime']?.[0] || '';
-            const description = item.description?.[0] || '';
+      try {
+        const items = await searchYahooAuction(model.query);
+        for (const item of items) {
+          if (seen.has(item.link)) continue;
 
-            if (seen.has(link)) continue;
-            seen.add(link);
+          const excluded = model.excludeWords.some(w =>
+            item.title.toLowerCase().includes(w.toLowerCase())
+          );
+          if (excluded) continue;
 
-            const status = judgeItem(title, description, model);
-            if (status === null) continue;
-
-            results.push({
-              model: model.name,
-              title,
-              link,
-              price,
-              endTime,
-              status,
-            });
-          }
-        } catch (e) {
-          console.error(`RSS fetch error for ${query}:`, e.message);
+          seen.add(item.link);
+          results.push({
+            model: model.name,
+            title: item.title,
+            link: item.link,
+            price: item.price,
+            endTime: item.endTime,
+            status: judgeStatus(item.title),
+          });
         }
+      } catch (e) {
+        console.error(`Error for ${model.query}:`, e.message);
       }
     }
 
