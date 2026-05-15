@@ -44,10 +44,21 @@ async function searchYahooAuction(query) {
     const link = $(el).find('a.Product__titleLink').attr('href') || '';
     const priceText = $(el).find('.Product__price').text().trim().replace(/[^0-9]/g, '');
     const endTimeText = $(el).find('.Product__time').text().trim();
+    const condition =
+      $(el).find('.Product__condition').text().trim() ||
+      $(el).find('[class*="condition"]').text().trim() ||
+      $(el).find('[class*="Condition"]').text().trim() ||
+      '';
 
     if (!title || !link) return;
 
-    items.push({ title, link, price: priceText || '不明', endTime: endTimeText });
+    items.push({
+      title,
+      link,
+      price: priceText || '不明',
+      endTime: endTimeText,
+      condition,
+    });
   });
 
   return items;
@@ -79,6 +90,7 @@ module.exports = async (req, res) => {
             price: item.price,
             endTime: item.endTime,
             status: judgeStatus(item.title),
+            condition: item.condition,
           });
         }
       } catch (e) {
