@@ -41,6 +41,10 @@ async function searchYahooAuction(query, istatus) {
     const link = $(el).find('a.Product__titleLink').attr('href') || '';
     const priceText = $(el).find('.Product__priceValue').text().trim().replace(/[^0-9]/g, '');
     const endTimeText = $(el).find('.Product__time').text().trim();
+    const postageText = $(el).find('.Product__postage').text().trim();
+    const isStore = $(el).find('.Product__seller--store').length > 0
+      || $(el).find('[class*="store"]').length > 0
+      || postageText.includes('税込');
 
     if (!title || !link) return;
 
@@ -49,6 +53,8 @@ async function searchYahooAuction(query, istatus) {
       link,
       price: priceText || '不明',
       endTime: endTimeText,
+      postage: postageText || '送料不明',
+      isStore,
     });
   });
 
@@ -82,6 +88,8 @@ module.exports = async (req, res) => {
               price: item.price,
               endTime: item.endTime,
               status: JUNK_WORDS.some(w => item.title.includes(w)) ? 'ジャンク' : searchType.status,
+              postage: item.postage,
+              isStore: item.isStore,
             });
           }
         } catch (e) {
