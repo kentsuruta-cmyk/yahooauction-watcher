@@ -1,0 +1,212 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>KENJAGAMES // Yahoo Auction Watcher</title>
+<style>
+* { margin: 0; padding: 0; box-sizing: border-box; }
+body { background: #f5f5f5; color: #111; font-family: 'Courier New', monospace; }
+header { padding: 20px 40px; border-bottom: 1px solid #ddd; background: #fff; }
+header h1 { color: #e0003c; font-size: 20px; letter-spacing: 2px; }
+header p { color: #888; font-size: 12px; margin-top: 4px; }
+.container { max-width: 1100px; margin: 40px auto; padding: 0 20px; }
+.card { background: #fff; border: 1px solid #e0e0e0; border-radius: 8px; padding: 30px; margin-bottom: 20px; }
+.card h2 { color: #e0003c; font-size: 13px; letter-spacing: 3px; margin-bottom: 20px; }
+.search-btn { width: 100%; background: #e0003c; border: none; color: #fff; padding: 14px; border-radius: 4px; font-size: 14px; letter-spacing: 2px; cursor: pointer; font-family: 'Courier New', monospace; transition: background 0.2s; }
+.search-btn:hover { background: #c0002e; }
+.search-btn:disabled { background: #ccc; cursor: not-allowed; }
+.results-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 16px; }
+.results-header span { color: #888; font-size: 12px; }
+.filter-row { display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 16px; }
+.filter-btns { display: flex; gap: 8px; flex-wrap: wrap; }
+.filter-btn { background: #f5f5f5; border: 1px solid #ddd; color: #555; padding: 6px 14px; border-radius: 4px; cursor: pointer; font-size: 12px; font-family: 'Courier New', monospace; transition: all 0.2s; }
+.filter-btn.active { background: #e0003c; border-color: #e0003c; color: #fff; font-weight: bold; }
+.clear-btn { background: none; border: 1px solid #ddd; color: #888; padding: 4px 10px; border-radius: 4px; cursor: pointer; font-size: 11px; font-family: 'Courier New', monospace; white-space: nowrap; }
+.clear-btn:hover { border-color: #e0003c; color: #e0003c; }
+table { width: 100%; border-collapse: collapse; font-size: 13px; }
+th { color: #e0003c; text-align: left; padding: 10px 12px; border-bottom: 2px solid #e0e0e0; font-size: 11px; letter-spacing: 1px; }
+td { padding: 10px 12px; border-bottom: 1px solid #f0f0f0; color: #333; vertical-align: top; }
+tr:hover td { background: #fafafa; }
+tr.checked td { opacity: 0.4; }
+td a { color: #e0003c; text-decoration: none; }
+td a:hover { text-decoration: underline; }
+.badge { font-size: 10px; padding: 2px 8px; border-radius: 3px; font-weight: bold; display: inline-block; }
+.badge-used { background: #00aa55; color: #fff; }
+.badge-junk { background: #e0003c; color: #fff; }
+.tax-badge { font-size: 9px; padding: 1px 5px; border-radius: 3px; display: inline-block; margin-left: 4px; }
+.tax-in { background: #ddd; color: #555; }
+.tax-ex { background: #fff3cd; color: #856404; }
+.check-btn { background: none; border: 1px solid #ccc; border-radius: 3px; width: 24px; height: 24px; cursor: pointer; font-size: 13px; line-height: 22px; text-align: center; display: inline-block; transition: all 0.2s; }
+.check-btn.on { background: #00aa55; border-color: #00aa55; color: #fff; }
+.status { text-align: center; padding: 40px; color: #888; font-size: 13px; }
+.progress { color: #e0003c; font-size: 12px; text-align: center; padding: 20px; }
+.note { color: #aaa; font-size: 11px; margin-bottom: 12px; }
+</style>
+</head>
+<body>
+<header>
+<h1>KENJAGAMES // Yahoo Auction Watcher</h1>
+<p>ヤフオク新着ゲーム機モニタリングツール</p>
+</header>
+<div class="container">
+<div class="card">
+<h2>▸ MONITOR CONFIG</h2>
+<p style="color:#888; font-size:12px; margin-bottom:16px;">
+監視対象：GBC / GBP / GBA / GBA SP / DS / DS Lite / DSi / DSi LL / 3DS / 3DS LL / PSP 1000・2000・3000
+</p>
+<button class="search-btn" id="searchBtn" onclick="startSearch()">🔍 新着を検索する</button>
+</div>
+<div class="card" id="resultsCard" style="display:none;">
+<div class="results-header">
+<h2>▸ RESULTS</h2>
+<span id="resultCount"></span>
+</div>
+<div class="filter-row">
+<div class="filter-btns" id="filterBtns"></div>
+<button class="clear-btn" onclick="clearChecked()">チェックをリセット</button>
+</div>
+<p class="note">※価格はヤフオク表示価格です。</p>
+<div id="progressLog"></div>
+<div id="resultsBody"></div>
+</div>
+</div>
+<script>
+let allItems = [];
+let currentFilter = 'all';
+let checkedLinks = new Set(JSON.parse(localStorage.getItem('checkedLinks') || '[]'));
+
+const MODEL_NAMES = [
+  'ゲームボーイカラー', 'ゲームボーイポケット', 'ゲームボーイアドバンス',
+  'ゲームボーイアドバンスSP', 'DS', 'DS Lite', 'DSi', 'DSi LL',
+  '3DS', '3DS LL', 'PSP 1000', 'PSP 2000', 'PSP 3000',
+];
+
+function saveChecked() {
+  localStorage.setItem('checkedLinks', JSON.stringify([...checkedLinks]));
+}
+
+function clearChecked() {
+  checkedLinks.clear();
+  saveChecked();
+  renderTable(allItems);
+}
+
+function toMinutes(s) {
+  if (!s) return 99999;
+  if (s.includes('日')) return (parseInt(s) || 99999) * 1440;
+  if (s.includes('時間')) return (parseInt(s) || 99999) * 60;
+  if (s.includes('分')) return parseInt(s) || 99999;
+  if (s.includes('秒')) return 1;
+  return 99999;
+}
+
+function getBadge(status) {
+  if (status === '中古') return '<span class="badge badge-used">中古</span>';
+  if (status === 'ジャンク') return '<span class="badge badge-junk">ジャンク</span>';
+  return '';
+}
+
+function getTaxBadge(isStore) {
+  return isStore
+    ? '<span class="tax-badge tax-in">税込</span>'
+    : '<span class="tax-badge tax-ex">税抜</span>';
+}
+
+function calcTotal(price, postage) {
+  const p = parseInt(price);
+  if (isNaN(p)) return '-';
+  if (postage.includes('無料')) return '¥' + p.toLocaleString();
+  const m = postage.match(/(\d[\d,]+)円/);
+  if (m) return '¥' + (p + parseInt(m[1].replace(',', ''))).toLocaleString();
+  return '-';
+}
+
+function buildFilterBtns() {
+  const container = document.getElementById('filterBtns');
+  const active = MODEL_NAMES.filter(m => allItems.some(i => i.model === m));
+  container.innerHTML = ['all', ...active].map(m =>
+    '<button class="filter-btn ' + (m === currentFilter ? 'active' : '') + '" onclick="setFilter(\'' + m + '\', this)">' +
+    (m === 'all' ? 'すべて' : m) + '</button>'
+  ).join('');
+}
+
+function renderTable(items) {
+  const filtered = currentFilter === 'all' ? items : items.filter(i => i.model === currentFilter);
+  document.getElementById('resultCount').textContent = filtered.length + ' 件表示 / 全' + items.length + '件';
+
+  if (filtered.length === 0) {
+    document.getElementById('resultsBody').innerHTML = '<div class="status">該当する商品が見つかりませんでした</div>';
+    return;
+  }
+
+  let rows = '';
+  for (let i = 0; i < filtered.length; i++) {
+    const item = filtered[i];
+    const checked = checkedLinks.has(item.link);
+    rows += '<tr class="' + (checked ? 'checked' : '') + '" id="row' + i + '">' +
+      '<td><button class="check-btn ' + (checked ? 'on' : '') + '" onclick="doCheck(\'' + item.link + '\',' + i + ')">' + (checked ? '✓' : '') + '</button></td>' +
+      '<td>' + item.model + '</td>' +
+      '<td><a href="' + item.link + '" target="_blank">' + item.title + '</a></td>' +
+      '<td>' + getBadge(item.status) + '</td>' +
+      '<td>¥' + Number(item.price).toLocaleString() + getTaxBadge(item.isStore) + '</td>' +
+      '<td>' + item.postage + '</td>' +
+      '<td>' + calcTotal(item.price, item.postage) + '</td>' +
+      '<td>' + (item.endTime || '不明') + '</td>' +
+      '</tr>';
+  }
+
+  document.getElementById('resultsBody').innerHTML =
+    '<table><thead><tr><th></th><th>機種</th><th>商品名</th><th>状態</th><th>現在価格</th><th>送料</th><th>合計</th><th>残り時間</th></tr></thead><tbody>' + rows + '</tbody></table>';
+}
+
+function doCheck(link, i) {
+  const row = document.getElementById('row' + i);
+  const btn = row.querySelector('.check-btn');
+  if (checkedLinks.has(link)) {
+    checkedLinks.delete(link);
+    btn.classList.remove('on');
+    btn.textContent = '';
+    row.classList.remove('checked');
+  } else {
+    checkedLinks.add(link);
+    btn.classList.add('on');
+    btn.textContent = '✓';
+    row.classList.add('checked');
+  }
+  saveChecked();
+}
+
+function setFilter(filter, btn) {
+  currentFilter = filter;
+  document.querySelectorAll('.filter-btn').forEach(b => b.classList.remove('active'));
+  btn.classList.add('active');
+  renderTable(allItems);
+}
+
+async function startSearch() {
+  const btn = document.getElementById('searchBtn');
+  btn.disabled = true;
+  btn.textContent = '⏳ 検索中...';
+  document.getElementById('resultsCard').style.display = 'block';
+  document.getElementById('progressLog').innerHTML = '<div class="progress">ヤフオクから新着を取得中...</div>';
+  document.getElementById('resultsBody').innerHTML = '';
+
+  try {
+    const res = await fetch('/api/search');
+    const data = await res.json();
+    allItems = (data.items || []).sort((a, b) => toMinutes(a.endTime) - toMinutes(b.endTime));
+    document.getElementById('progressLog').innerHTML = '';
+    currentFilter = 'all';
+    buildFilterBtns();
+    renderTable(allItems);
+  } catch (e) {
+    document.getElementById('progressLog').innerHTML = '<div class="status" style="color:#e0003c;">エラーが発生しました。もう一度お試しください。</div>';
+  }
+
+  btn.disabled = false;
+  btn.textContent = '🔍 新着を検索する';
+}
+</script>
+</body>
+</html>
