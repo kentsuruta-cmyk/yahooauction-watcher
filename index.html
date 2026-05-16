@@ -30,6 +30,9 @@ td a:hover { text-decoration: underline; }
 .badge { font-size: 10px; padding: 2px 8px; border-radius: 3px; font-weight: bold; display: inline-block; }
 .badge-used { background: #00aa55; color: #fff; }
 .badge-junk { background: #e0003c; color: #fff; }
+.tax-badge { font-size: 9px; padding: 1px 5px; border-radius: 3px; display: inline-block; margin-left: 4px; }
+.tax-in { background: #ddd; color: #555; }
+.tax-ex { background: #fff3cd; color: #856404; }
 .status { text-align: center; padding: 40px; color: #888; font-size: 13px; }
 .progress { color: #e0003c; font-size: 12px; text-align: center; padding: 20px; }
 .note { color: #aaa; font-size: 11px; margin-bottom: 12px; }
@@ -103,6 +106,11 @@ function getBadge(status) {
   return '';
 }
 
+function getTaxBadge(isStore) {
+  if (isStore) return '<span class="tax-badge tax-in">税込</span>';
+  return '<span class="tax-badge tax-ex">税抜</span>';
+}
+
 function calcTotal(price, postage) {
   const p = parseInt(price);
   if (isNaN(p)) return '-';
@@ -117,7 +125,8 @@ function calcTotal(price, postage) {
 
 function buildFilterBtns() {
   const container = document.getElementById('filterBtns');
-  const models = ['all', ...MODEL_NAMES.filter(m => allItems.some(i => i.model === m))];
+  const activeModels = MODEL_NAMES.filter(m => allItems.some(i => i.model === m));
+  const models = ['all', ...activeModels];
   container.innerHTML = models.map(m => `
     <button class="filter-btn ${m === currentFilter ? 'active' : ''}"
       onclick="setFilter('${m}', this)">
@@ -154,7 +163,7 @@ ${filtered.map(item => `
 <td>${item.model}</td>
 <td><a href="${item.link}" target="_blank">${item.title}</a></td>
 <td>${getBadge(item.status)}</td>
-<td>¥${Number(item.price).toLocaleString()}</td>
+<td>¥${Number(item.price).toLocaleString()}${getTaxBadge(item.isStore)}</td>
 <td>${item.postage}</td>
 <td>${calcTotal(item.price, item.postage)}</td>
 <td>${item.endTime || '不明'}</td>
