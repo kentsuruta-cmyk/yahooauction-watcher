@@ -42,9 +42,8 @@ async function searchYahooAuction(query, istatus) {
     const priceText = $(el).find('.Product__priceValue').text().trim().replace(/[^0-9]/g, '');
     const endTimeText = $(el).find('.Product__time').text().trim();
     const postageText = $(el).find('.Product__postage').text().trim();
-    const isStore = $(el).find('.Product__seller--store').length > 0
-      || $(el).find('[class*="store"]').length > 0
-      || postageText.includes('税込');
+    const priceLabel = $(el).find('.Product__priceValue').parent().text();
+    const isStore = priceLabel.includes('税込') || $(el).find('.Product__store').length > 0;
 
     if (!title || !link) return;
 
