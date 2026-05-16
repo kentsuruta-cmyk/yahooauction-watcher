@@ -53,11 +53,7 @@ td a:hover { text-decoration: underline; }
 <h2>▸ RESULTS</h2>
 <span id="resultCount"></span>
 </div>
-<div class="filter-btns">
-<button class="filter-btn active" data-filter="all" onclick="setFilter('all', this)">すべて</button>
-<button class="filter-btn" data-filter="中古" onclick="setFilter('中古', this)">中古のみ</button>
-<button class="filter-btn" data-filter="ジャンク" onclick="setFilter('ジャンク', this)">ジャンクのみ</button>
-</div>
+<div class="filter-btns" id="filterBtns"></div>
 <p class="note">※価格はヤフオク表示価格です。</p>
 <div id="progressLog"></div>
 <div id="resultsBody"></div>
@@ -66,6 +62,22 @@ td a:hover { text-decoration: underline; }
 <script>
 let allItems = [];
 let currentFilter = 'all';
+
+const MODEL_NAMES = [
+  'ゲームボーイカラー',
+  'ゲームボーイポケット',
+  'ゲームボーイアドバンス',
+  'ゲームボーイアドバンスSP',
+  'DS',
+  'DS Lite',
+  'DSi',
+  'DSi LL',
+  '3DS',
+  '3DS LL',
+  'PSP 1000',
+  'PSP 2000',
+  'PSP 3000',
+];
 
 function toMinutes(endTimeStr) {
   if (!endTimeStr) return 99999;
@@ -103,8 +115,19 @@ function calcTotal(price, postage) {
   return '-';
 }
 
+function buildFilterBtns() {
+  const container = document.getElementById('filterBtns');
+  const models = ['all', ...MODEL_NAMES.filter(m => allItems.some(i => i.model === m))];
+  container.innerHTML = models.map(m => `
+    <button class="filter-btn ${m === currentFilter ? 'active' : ''}"
+      onclick="setFilter('${m}', this)">
+      ${m === 'all' ? 'すべて' : m}
+    </button>
+  `).join('');
+}
+
 function renderTable(items) {
-  const filtered = currentFilter === 'all' ? items : items.filter(i => i.status === currentFilter);
+  const filtered = currentFilter === 'all' ? items : items.filter(i => i.model === currentFilter);
   document.getElementById('resultCount').textContent = `${filtered.length} 件表示 / 全${items.length}件`;
 
   if (filtered.length === 0) {
@@ -163,6 +186,8 @@ async function startSearch() {
     const data = await res.json();
     allItems = (data.items || []).sort((a, b) => toMinutes(a.endTime) - toMinutes(b.endTime));
     progressLog.innerHTML = '';
+    currentFilter = 'all';
+    buildFilterBtns();
     renderTable(allItems);
   } catch (e) {
     progressLog.innerHTML = '<div class="status" style="color:#e0003c;">エラーが発生しました。もう一度お試しください。</div>';
