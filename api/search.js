@@ -17,10 +17,11 @@ const MODELS = [
   { name: 'PSP 3000', query: 'PSP-3000 本体', excludeWords: [] },
 ];
 
-// istatus: 2=目立った傷なし 3=やや傷あり 4=傷あり 5=状態が悪い
+const JUNK_WORDS = ['ジャンク', '動作未確認', '不動品', '動作不良'];
+
 const SEARCH_TYPES = [
-  { status: '中古', istatus: '2,3' },
   { status: 'ジャンク', istatus: '3,4,5' },
+  { status: '中古', istatus: '2,3' },
 ];
 
 async function searchYahooAuction(query, istatus) {
@@ -80,7 +81,7 @@ module.exports = async (req, res) => {
               link: item.link,
               price: item.price,
               endTime: item.endTime,
-              status: searchType.status,
+              status: JUNK_WORDS.some(w => item.title.includes(w)) ? 'ジャンク' : searchType.status,
             });
           }
         } catch (e) {
