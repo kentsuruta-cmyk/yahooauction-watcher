@@ -67,6 +67,23 @@ td a:hover { text-decoration: underline; }
 let allItems = [];
 let currentFilter = 'all';
 
+function toMinutes(endTimeStr) {
+  if (!endTimeStr) return 99999;
+  if (endTimeStr.includes('日')) {
+    const d = parseInt(endTimeStr);
+    return (isNaN(d) ? 99999 : d * 24 * 60);
+  }
+  if (endTimeStr.includes('時間')) {
+    const h = parseInt(endTimeStr);
+    return (isNaN(h) ? 99999 : h * 60);
+  }
+  if (endTimeStr.includes('分')) {
+    const m = parseInt(endTimeStr);
+    return (isNaN(m) ? 99999 : m);
+  }
+  return 99999;
+}
+
 function timeRemaining(endTimeStr) {
   if (!endTimeStr) return '不明';
   return endTimeStr;
@@ -132,7 +149,7 @@ async function startSearch() {
   try {
     const res = await fetch('/api/search');
     const data = await res.json();
-    allItems = data.items || [];
+    allItems = (data.items || []).sort((a, b) => toMinutes(a.endTime) - toMinutes(b.endTime));
     progressLog.innerHTML = '';
     renderTable(allItems);
   } catch (e) {
