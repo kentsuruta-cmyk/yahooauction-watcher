@@ -17,7 +17,8 @@ const MODELS = [
   { name: 'PSP 3000', query: 'PSP-3000 本体', excludeWords: [] },
 ];
 
-const JUNK_WORDS = ['ジャンク', '動作未確認', '不動品', '動作不良'];
+const JUNK_WORDS = ['ジャンク', '動作未確認', '不動品', '動作不良', '現状品', '傷あり'];
+const WORKING_WORDS = ['動作品', '動作確認済', '完動品'];
 
 const SEARCH_TYPES = [
   { status: 'ジャンク', istatus: '3,4,5' },
@@ -86,7 +87,11 @@ module.exports = async (req, res) => {
               link: item.link,
               price: item.price,
               endTime: item.endTime,
-              status: JUNK_WORDS.some(w => item.title.includes(w)) ? 'ジャンク' : searchType.status,
+              status: (() => {
+                if (WORKING_WORDS.some(w => item.title.includes(w))) return '中古';
+                if (JUNK_WORDS.some(w => item.title.includes(w))) return 'ジャンク';
+                return searchType.status;
+              })(),
               postage: item.postage,
               isStore: item.isStore,
             });
