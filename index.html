@@ -22,8 +22,12 @@ header p { color: #888; font-size: 12px; margin-top: 4px; }
 .filter-btns { display: flex; gap: 8px; flex-wrap: wrap; }
 .filter-btn { background: #f5f5f5; border: 1px solid #ddd; color: #555; padding: 6px 14px; border-radius: 4px; cursor: pointer; font-size: 12px; font-family: 'Courier New', monospace; transition: all 0.2s; }
 .filter-btn.active { background: #e0003c; border-color: #e0003c; color: #fff; font-weight: bold; }
+.action-btns { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; }
 .clear-btn { background: none; border: 1px solid #ddd; color: #888; padding: 4px 10px; border-radius: 4px; cursor: pointer; font-size: 11px; font-family: 'Courier New', monospace; white-space: nowrap; }
 .clear-btn:hover { border-color: #e0003c; color: #e0003c; }
+.hide-btn { background: none; border: 1px solid #ddd; color: #888; padding: 4px 10px; border-radius: 4px; cursor: pointer; font-size: 11px; font-family: 'Courier New', monospace; white-space: nowrap; transition: all 0.2s; }
+.hide-btn.active { background: #111; border-color: #111; color: #fff; }
+.hide-btn:hover { border-color: #111; color: #111; }
 table { width: 100%; border-collapse: collapse; font-size: 13px; }
 th { color: #e0003c; text-align: left; padding: 10px 12px; border-bottom: 2px solid #e0e0e0; font-size: 11px; letter-spacing: 1px; }
 td { padding: 10px 12px; border-bottom: 1px solid #f0f0f0; color: #333; vertical-align: top; }
@@ -64,7 +68,10 @@ td a:hover { text-decoration: underline; }
 </div>
 <div class="filter-row">
 <div class="filter-btns" id="filterBtns"></div>
+<div class="action-btns">
+<button class="hide-btn" id="hideCheckedBtn" onclick="toggleHideChecked()">チェック済みを隠す</button>
 <button class="clear-btn" onclick="clearChecked()">チェックをリセット</button>
+</div>
 </div>
 <p class="note">※価格はヤフオク表示価格です。</p>
 <div id="progressLog"></div>
@@ -74,6 +81,7 @@ td a:hover { text-decoration: underline; }
 <script>
 let allItems = [];
 let currentFilter = 'all';
+let hideChecked = false;
 let checkedLinks = new Set(JSON.parse(localStorage.getItem('checkedLinks') || '[]'));
 
 const MODEL_NAMES = [
@@ -89,6 +97,19 @@ function saveChecked() {
 function clearChecked() {
   checkedLinks.clear();
   saveChecked();
+  renderTable(allItems);
+}
+
+function toggleHideChecked() {
+  hideChecked = !hideChecked;
+  var btn = document.getElementById('hideCheckedBtn');
+  if (hideChecked) {
+    btn.classList.add('active');
+    btn.textContent = 'チェック済みを表示';
+  } else {
+    btn.classList.remove('active');
+    btn.textContent = 'チェック済みを隠す';
+  }
   renderTable(allItems);
 }
 
@@ -114,38 +135,46 @@ function getTaxBadge(isStore) {
 }
 
 function calcTotal(price, postage) {
-  const p = parseInt(price);
+  var p = parseInt(price);
   if (isNaN(p)) return '-';
   if (postage.includes('無料')) return '¥' + p.toLocaleString();
-  const m = postage.match(/(\d[\d,]+)円/);
+  var m = postage.match(/(\d[\d,]+)円/);
   if (m) return '¥' + (p + parseInt(m[1].replace(',', ''))).toLocaleString();
   return '-';
 }
 
 function buildFilterBtns() {
-  const container = document.getElementById('filterBtns');
-  const active = MODEL_NAMES.filter(m => allItems.some(i => i.model === m));
-  container.innerHTML = ['all', ...active].map(m =>
-    '<button class="filter-btn ' + (m === currentFilter ? 'active' : '') + '" onclick="setFilter(\'' + m + '\', this)">' +
-    (m === 'all' ? 'すべて' : m) + '</button>'
-  ).join('');
+  var container = document.getElementById('filterBtns');
+  var active = MODEL_NAMES.filter(function(m) { return allItems.some(function(i) { return i.model === m; }); });
+  container.innerHTML = ['all'].concat(active).map(function(m) {
+    return '<button class="filter-btn ' + (m === currentFilter ? 'active' : '') + '" onclick="setFilter(\'' + m + '\', this)">' +
+      (m === 'all' ? 'すべて' : m) + '</button>';
+  }).join('');
 }
 
 function renderTable(items) {
-  const filtered = currentFilter === 'all' ? items : items.filter(i => i.model === currentFilter);
-  document.getElementById('resultCount').textContent = filtered.length + ' 件表示 / 全' + items.length + '件';
+  var modelFiltered = currentFilter === 'all' ? items : items.filter(function(i) { return i.model === currentFilter; });
+  var filtered = hideChecked ? modelFiltered.filter(function(i) { return !checkedLinks.has(i.link); }) : modelFiltered;
+
+  var hiddenCount = modelFiltered.length - filtered.length;
+  var countText = filtered.length + ' 件表示 / 全' + items.length + '件';
+  if (hiddenCount > 0) {
+    countText += ' （' + hiddenCount + '件非表示）';
+  }
+  document.getElementById('resultCount').textContent = countText;
 
   if (filtered.length === 0) {
     document.getElementById('resultsBody').innerHTML = '<div class="status">該当する商品が見つかりませんでした</div>';
     return;
   }
 
-  let rows = '';
-  for (let i = 0; i < filtered.length; i++) {
-    const item = filtered[i];
-    const checked = checkedLinks.has(item.link);
+  var rows = '';
+  for (var i = 0; i < filtered.length; i++) {
+    var item = filtered[i];
+    var checked = checkedLinks.has(item.link);
+    var encodedLink = item.link.replace(/'/g, "\\'");
     rows += '<tr class="' + (checked ? 'checked' : '') + '" id="row' + i + '">' +
-      '<td><button class="check-btn ' + (checked ? 'on' : '') + '" onclick="doCheck(\'' + item.link + '\',' + i + ')">' + (checked ? '✓' : '') + '</button></td>' +
+      '<td><button class="check-btn ' + (checked ? 'on' : '') + '" onclick="doCheck(\'' + encodedLink + '\',' + i + ')">' + (checked ? '✓' : '') + '</button></td>' +
       '<td>' + item.model + '</td>' +
       '<td><a href="' + item.link + '" target="_blank">' + item.title + '</a></td>' +
       '<td>' + getBadge(item.status) + '</td>' +
@@ -161,8 +190,8 @@ function renderTable(items) {
 }
 
 function doCheck(link, i) {
-  const row = document.getElementById('row' + i);
-  const btn = row.querySelector('.check-btn');
+  var row = document.getElementById('row' + i);
+  var btn = row.querySelector('.check-btn');
   if (checkedLinks.has(link)) {
     checkedLinks.delete(link);
     btn.classList.remove('on');
@@ -173,19 +202,23 @@ function doCheck(link, i) {
     btn.classList.add('on');
     btn.textContent = '✓';
     row.classList.add('checked');
+    if (hideChecked) {
+      row.style.display = 'none';
+      renderTable(allItems);
+    }
   }
   saveChecked();
 }
 
 function setFilter(filter, btn) {
   currentFilter = filter;
-  document.querySelectorAll('.filter-btn').forEach(b => b.classList.remove('active'));
+  document.querySelectorAll('.filter-btn').forEach(function(b) { b.classList.remove('active'); });
   btn.classList.add('active');
   renderTable(allItems);
 }
 
 async function startSearch() {
-  const btn = document.getElementById('searchBtn');
+  var btn = document.getElementById('searchBtn');
   btn.disabled = true;
   btn.textContent = '⏳ 検索中...';
   document.getElementById('resultsCard').style.display = 'block';
@@ -193,9 +226,9 @@ async function startSearch() {
   document.getElementById('resultsBody').innerHTML = '';
 
   try {
-    const res = await fetch('/api/search');
-    const data = await res.json();
-    allItems = (data.items || []).sort((a, b) => toMinutes(a.endTime) - toMinutes(b.endTime));
+    var res = await fetch('/api/search');
+    var data = await res.json();
+    allItems = (data.items || []).sort(function(a, b) { return toMinutes(a.endTime) - toMinutes(b.endTime); });
     document.getElementById('progressLog').innerHTML = '';
     currentFilter = 'all';
     buildFilterBtns();
