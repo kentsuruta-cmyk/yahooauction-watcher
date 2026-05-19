@@ -82,7 +82,7 @@ td a:hover { text-decoration: underline; }
 let allItems = [];
 let currentFilter = 'all';
 let hideChecked = false;
-let checkedLinks = new Set(JSON.parse(localStorage.getItem('checkedLinks') || '[]'));
+let checkedIds = new Set();
 
 const MODEL_NAMES = [
   'ゲームボーイカラー', 'ゲームボーイポケット', 'ゲームボーイアドバンス',
@@ -90,13 +90,44 @@ const MODEL_NAMES = [
   '3DS', '3DS LL', 'PSP 1000', 'PSP 2000', 'PSP 3000',
 ];
 
-function saveChecked() {
-  localStorage.setItem('checkedLinks', JSON.stringify([...checkedLinks]));
+function getAuctionId(link) {
+  var m = link.match(/\/auction\/([a-z0-9]+)/i);
+  return m ? m[1] : link;
 }
 
-function clearChecked() {
-  checkedLinks.clear();
-  saveChecked();
+async function loadChecked() {
+  try {
+    var res = await fetch('/api/checked');
+    var data = await res.json();
+    checkedIds = new Set(data.checked || []);
+  } catch (e) {
+    checkedIds = new Set();
+  }
+}
+
+async function saveCheck(auctionId) {
+  await fetch('/api/checked', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ auctionId: auctionId }),
+  });
+}
+
+async function removeCheck(auctionId) {
+  await fetch('/api/checked', {
+    method: 'DELETE',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ auctionId: auctionId }),
+  });
+}
+
+async function clearChecked() {
+  await fetch('/api/checked', {
+    method: 'DELETE',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({}),
+  });
+  checkedIds.clear();
   renderTable(allItems);
 }
 
@@ -154,13 +185,11 @@ function buildFilterBtns() {
 
 function renderTable(items) {
   var modelFiltered = currentFilter === 'all' ? items : items.filter(function(i) { return i.model === currentFilter; });
-  var filtered = hideChecked ? modelFiltered.filter(function(i) { return !checkedLinks.has(i.link); }) : modelFiltered;
+  var filtered = hideChecked ? modelFiltered.filter(function(i) { return !checkedIds.has(getAuctionId(i.link)); }) : modelFiltered;
 
   var hiddenCount = modelFiltered.length - filtered.length;
   var countText = filtered.length + ' 件表示 / 全' + items.length + '件';
-  if (hiddenCount > 0) {
-    countText += ' （' + hiddenCount + '件非表示）';
-  }
+  if (hiddenCount > 0) countText += ' （' + hiddenCount + '件非表示）';
   document.getElementById('resultCount').textContent = countText;
 
   if (filtered.length === 0) {
@@ -171,10 +200,11 @@ function renderTable(items) {
   var rows = '';
   for (var i = 0; i < filtered.length; i++) {
     var item = filtered[i];
-    var checked = checkedLinks.has(item.link);
-    var encodedLink = item.link.replace(/'/g, "\\'");
+    var auctionId = getAuctionId(item.link);
+    var checked = checkedIds.has(auctionId);
+    var encodedId = auctionId.replace(/'/g, "\\'");
     rows += '<tr class="' + (checked ? 'checked' : '') + '" id="row' + i + '">' +
-      '<td><button class="check-btn ' + (checked ? 'on' : '') + '" onclick="doCheck(\'' + encodedLink + '\',' + i + ')">' + (checked ? '✓' : '') + '</button></td>' +
+      '<td><button class="check-btn ' + (checked ? 'on' : '') + '" onclick="doCheck(\'' + encodedId + '\',' + i + ')">' + (checked ? '✓' : '') + '</button></td>' +
       '<td>' + item.model + '</td>' +
       '<td><a href="' + item.link + '" target="_blank">' + item.title + '</a></td>' +
       '<td>' + getBadge(item.status) + '</td>' +
@@ -189,25 +219,23 @@ function renderTable(items) {
     '<table><thead><tr><th></th><th>機種</th><th>商品名</th><th>状態</th><th>現在価格</th><th>送料</th><th>合計</th><th>残り時間</th></tr></thead><tbody>' + rows + '</tbody></table>';
 }
 
-function doCheck(link, i) {
+async function doCheck(auctionId, i) {
   var row = document.getElementById('row' + i);
   var btn = row.querySelector('.check-btn');
-  if (checkedLinks.has(link)) {
-    checkedLinks.delete(link);
+  if (checkedIds.has(auctionId)) {
+    checkedIds.delete(auctionId);
     btn.classList.remove('on');
     btn.textContent = '';
     row.classList.remove('checked');
+    await removeCheck(auctionId);
   } else {
-    checkedLinks.add(link);
+    checkedIds.add(auctionId);
     btn.classList.add('on');
     btn.textContent = '✓';
     row.classList.add('checked');
-    if (hideChecked) {
-      row.style.display = 'none';
-      renderTable(allItems);
-    }
+    await saveCheck(auctionId);
+    if (hideChecked) renderTable(allItems);
   }
-  saveChecked();
 }
 
 function setFilter(filter, btn) {
@@ -224,6 +252,8 @@ async function startSearch() {
   document.getElementById('resultsCard').style.display = 'block';
   document.getElementById('progressLog').innerHTML = '<div class="progress">ヤフオクから新着を取得中...</div>';
   document.getElementById('resultsBody').innerHTML = '';
+
+  await loadChecked();
 
   try {
     var res = await fetch('/api/search');
