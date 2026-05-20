@@ -244,7 +244,15 @@ function setFilter(filter, btn) {
   btn.classList.add('active');
   renderTable(allItems);
 }
-
+async function loadChecked() {
+  try {
+    var res = await fetch('/api/checked');
+    var data = await res.json();
+    checkedIds = new Set(data.checked || []);
+  } catch (e) {
+    checkedIds = new Set();
+  }
+}
 async function startSearch() {
   var btn = document.getElementById('searchBtn');
   btn.disabled = true;
