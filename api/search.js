@@ -2,6 +2,15 @@ const fetch = require('node-fetch');
 const cheerio = require('cheerio');
 
 const MODELS = [
+  {
+    name: 'ゲームボーイ（DMG）',
+    keywords: ['ゲームボーイ DMG', 'GAMEBOY DMG', 'ゲームボーイ 初代'],
+    suffix: '本体',
+    junkOk: true,
+    junkWords: ['ジャンク', '動作未確認', '不動品', '動作不良'],
+    usedWords: ['動作品', '稼働品', '動作確認済', '動作確認済み'],
+    excludeWords: ['カラー', 'ポケット', 'アドバンス', 'GBC', 'GBA'],
+  },
   { name: 'ゲームボーイカラー', query: 'ゲームボーイカラー 本体', excludeWords: [] },
   { name: 'ゲームボーイポケット', query: 'ゲームボーイポケット 本体', excludeWords: [] },
   { name: 'ゲームボーイアドバンス', query: 'ゲームボーイアドバンス 本体', excludeWords: ['SP'] },
