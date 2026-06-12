@@ -4,6 +4,7 @@ const cheerio = require('cheerio');
 const MODELS = [
   {
     name: 'ゲームボーイ（DMG）',
+    query: 'ゲームボーイ DMG 本体',
     keywords: ['ゲームボーイ DMG', 'GAMEBOY DMG', 'ゲームボーイ 初代'],
     suffix: '本体',
     junkOk: true,
