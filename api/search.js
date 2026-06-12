@@ -10,7 +10,7 @@ const MODELS = [
     junkOk: true,
     junkWords: ['ジャンク', '動作未確認', '不動品', '動作不良'],
     usedWords: ['動作品', '稼働品', '動作確認済', '動作確認済み'],
-    excludeWords: ['カラー', 'ポケット', 'アドバンス', 'GBC', 'GBA'],
+    excludeWords: ['カラー', 'ポケット', 'アドバンス', 'GBC', 'GBA', 'ソフト', 'カセット', 'ロム', 'ROM', 'ゲームソフト'],
   },
   { name: 'ゲームボーイカラー', query: 'ゲームボーイカラー 本体', excludeWords: [] },
   { name: 'ゲームボーイポケット', query: 'ゲームボーイポケット 本体', excludeWords: [] },
