@@ -30,12 +30,12 @@ const MODELS = [
   {
     name: 'DS',
     query: 'ニンテンドーDS 本体',
-    excludeWords: ['Lite', 'DSi', 'LL'],
+    excludeWords: ['Lite', 'DSi', 'LL','全体的に状態が悪い'],
   },
   {
     name: 'DS Lite',
     query: 'DS Lite 本体',
-    excludeWords: [],
+    excludeWords: ['全体的に状態が悪い'],
   },
   {
     name: 'DSi',
@@ -55,7 +55,7 @@ const MODELS = [
   {
     name: '3DS LL',
     query: '3DS LL 本体',
-    excludeWords: [],
+    excludeWords: ['全体的に状態が悪い'],
   },
   {
     name: 'PSP 1000',
