@@ -9,7 +9,7 @@ const MODELS = [
     junkOk: true,
     junkWords: ['ジャンク', '動作未確認', '不動品', '動作不良'],
     usedWords: ['動作品', '稼働品', '動作確認済', '動作確認済み'],
-    excludeWords: ['カラー', 'ポケット', 'アドバンス', 'GBC', 'GBA', '全体的に状態が悪い', '状態悪', '状態難'],
+    excludeWords: ['カラー', 'ポケット', 'アドバンス', 'GBC', 'GBA'],
   },
   {
     name: 'ゲームボーイカラー',
@@ -63,7 +63,7 @@ const MODELS = [
     junkOk: false,
     junkWords: ['ジャンク', '動作未確認', '不動品', '動作不良'],
     usedWords: ['動作品', '稼働品', '動作確認済', '動作確認済み'],
-    excludeWords: ['ヤケ', '黄ばみ', '黄変'],
+    excludeWords: [],
   },
   {
     name: 'DSi',
@@ -72,7 +72,7 @@ const MODELS = [
     junkOk: false,
     junkWords: ['ジャンク', '動作未確認', '不動品', '動作不良'],
     usedWords: ['動作品', '稼働品', '動作確認済', '動作確認済み'],
-    excludeWords: ['LL', '全体的に状態が悪い', '状態悪', '状態難'],
+    excludeWords: ['LL'],
   },
   {
     name: 'DSi LL',
@@ -81,7 +81,7 @@ const MODELS = [
     junkOk: false,
     junkWords: ['ジャンク', '動作未確認', '不動品', '動作不良'],
     usedWords: ['動作品', '稼働品', '動作確認済', '動作確認済み'],
-    excludeWords: ['全体的に状態が悪い', '状態悪', '状態難'],
+    excludeWords: [],
   },
   {
     name: '3DS',
@@ -90,7 +90,7 @@ const MODELS = [
     junkOk: false,
     junkWords: ['ジャンク', '動作未確認', '不動品', '動作不良'],
     usedWords: ['動作品', '稼働品', '動作確認済', '動作確認済み'],
-    excludeWords: ['LL', '全体的に状態が悪い', '状態悪', '状態難'],
+    excludeWords: ['LL'],
   },
   {
     name: '3DS LL',
@@ -99,7 +99,7 @@ const MODELS = [
     junkOk: false,
     junkWords: ['ジャンク', '動作未確認', '不動品', '動作不良'],
     usedWords: ['動作品', '稼働品', '動作確認済', '動作確認済み'],
-    excludeWords: ['全体的に状態が悪い', '状態悪', '状態難'],
+    excludeWords: [],
   },
   {
     name: 'PSP 1000',
@@ -108,7 +108,7 @@ const MODELS = [
     junkOk: false,
     junkWords: ['ジャンク', '動作未確認', '不動品', '動作不良'],
     usedWords: ['動作品', '稼働品', '動作確認済', '動作確認済み'],
-    excludeWords: ['ヤケ', '黄ばみ', '黄変', '全体的に状態が悪い', '状態悪', '状態難'],
+    excludeWords: [],
   },
   {
     name: 'PSP 2000',
@@ -117,7 +117,7 @@ const MODELS = [
     junkOk: false,
     junkWords: ['ジャンク', '動作未確認', '不動品', '動作不良'],
     usedWords: ['動作品', '稼働品', '動作確認済', '動作確認済み'],
-    excludeWords: ['ヤケ', '黄ばみ', '黄変', '全体的に状態が悪い', '状態悪', '状態難'],
+    excludeWords: [],
   },
   {
     name: 'PSP 3000',
@@ -126,24 +126,21 @@ const MODELS = [
     junkOk: false,
     junkWords: ['ジャンク', '動作未確認', '不動品', '動作不良'],
     usedWords: ['動作品', '稼働品', '動作確認済', '動作確認済み'],
-    excludeWords: ['ヤケ', '黄ばみ', '黄変'],
+    excludeWords: [],
   },
 ];
 
 function judgeItem(title, description, model) {
   const text = (title + ' ' + (description || '')).toLowerCase();
 
-  // Check exclude words
   for (const word of model.excludeWords) {
     if (text.includes(word.toLowerCase())) return null;
   }
 
-  // Check junk
   const isJunk = model.junkWords.some(w => text.includes(w.toLowerCase()));
   if (isJunk && !model.junkOk) return null;
   if (isJunk) return 'ジャンク';
 
-  // Check used
   const isUsed = model.usedWords.some(w => text.includes(w.toLowerCase()));
   if (isUsed) return '中古';
 
