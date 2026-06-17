@@ -1,73 +1,163 @@
 const fetch = require('node-fetch');
-const cheerio = require('cheerio');
+const xml2js = require('xml2js');
 
 const MODELS = [
   {
     name: 'ゲームボーイ（DMG）',
-    query: 'ゲームボーイ DMG 本体',
     keywords: ['ゲームボーイ DMG', 'GAMEBOY DMG', 'ゲームボーイ 初代'],
     suffix: '本体',
     junkOk: true,
     junkWords: ['ジャンク', '動作未確認', '不動品', '動作不良'],
     usedWords: ['動作品', '稼働品', '動作確認済', '動作確認済み'],
-    excludeWords: ['カラー', 'ポケット', 'アドバンス', 'GBC', 'GBA', 'ソフト', 'カセット', 'ロム', 'ROM', 'ゲームソフト'],
+    excludeWords: ['カラー', 'ポケット', 'アドバンス', 'GBC', 'GBA', '全体的に状態が悪い', '状態悪', '状態難'],
   },
-  { name: 'ゲームボーイカラー', query: 'ゲームボーイカラー 本体', excludeWords: [] },
-  { name: 'ゲームボーイポケット', query: 'ゲームボーイポケット 本体', excludeWords: [] },
-  { name: 'ゲームボーイアドバンス', query: 'ゲームボーイアドバンス 本体', excludeWords: ['SP'] },
-  { name: 'ゲームボーイアドバンスSP', query: 'ゲームボーイアドバンスSP 本体', excludeWords: [] },
-  { name: 'DS', query: 'ニンテンドーDS 本体', excludeWords: ['Lite', 'DSi', 'LL'] },
-  { name: 'DS Lite', query: 'DS Lite 本体', excludeWords: [] },
-  { name: 'DSi', query: 'DSi 本体', excludeWords: ['LL'] },
-  { name: 'DSi LL', query: 'DSi LL 本体', excludeWords: [] },
-  { name: '3DS', query: '3DS 本体', excludeWords: ['LL'] },
-  { name: '3DS LL', query: '3DS LL 本体', excludeWords: [] },
-  { name: 'PSP 1000', query: 'PSP-1000 本体', excludeWords: [] },
-  { name: 'PSP 2000', query: 'PSP-2000 本体', excludeWords: [] },
-  { name: 'PSP 3000', query: 'PSP-3000 本体', excludeWords: [] },
+  {
+    name: 'ゲームボーイカラー',
+    keywords: ['ゲームボーイカラー', 'GBC'],
+    suffix: '本体',
+    junkOk: true,
+    junkWords: ['ジャンク', '動作未確認', '不動品', '動作不良'],
+    usedWords: ['動作品', '稼働品', '動作確認済', '動作確認済み'],
+    excludeWords: [],
+  },
+  {
+    name: 'ゲームボーイポケット',
+    keywords: ['ゲームボーイポケット', 'GBP'],
+    suffix: '本体',
+    junkOk: true,
+    junkWords: ['ジャンク', '動作未確認', '不動品', '動作不良'],
+    usedWords: ['動作品', '稼働品', '動作確認済', '動作確認済み'],
+    excludeWords: [],
+  },
+  {
+    name: 'ゲームボーイアドバンス',
+    keywords: ['ゲームボーイアドバンス', 'GBA'],
+    suffix: '本体',
+    junkOk: true,
+    junkWords: ['ジャンク', '動作未確認', '不動品', '動作不良'],
+    usedWords: ['動作品', '稼働品', '動作確認済', '動作確認済み'],
+    excludeWords: ['SP', 'アドバンスSP'],
+  },
+  {
+    name: 'ゲームボーイアドバンスSP',
+    keywords: ['ゲームボーイアドバンス SP', 'GBA SP'],
+    suffix: '本体',
+    junkOk: true,
+    junkWords: ['ジャンク', '動作未確認', '不動品', '動作不良'],
+    usedWords: ['動作品', '稼働品', '動作確認済', '動作確認済み'],
+    excludeWords: [],
+  },
+  {
+    name: 'DS',
+    keywords: ['初代DS', 'ニンテンドーDS'],
+    suffix: '本体',
+    junkOk: false,
+    junkWords: ['ジャンク', '動作未確認', '不動品', '動作不良'],
+    usedWords: ['動作品', '稼働品', '動作確認済', '動作確認済み'],
+    excludeWords: ['Lite', 'DSi', 'LL'],
+  },
+  {
+    name: 'DS Lite',
+    keywords: ['DS Lite', 'DSLite'],
+    suffix: '本体',
+    junkOk: false,
+    junkWords: ['ジャンク', '動作未確認', '不動品', '動作不良'],
+    usedWords: ['動作品', '稼働品', '動作確認済', '動作確認済み'],
+    excludeWords: ['ヤケ', '黄ばみ', '黄変'],
+  },
+  {
+    name: 'DSi',
+    keywords: ['DSi'],
+    suffix: '本体',
+    junkOk: false,
+    junkWords: ['ジャンク', '動作未確認', '不動品', '動作不良'],
+    usedWords: ['動作品', '稼働品', '動作確認済', '動作確認済み'],
+    excludeWords: ['LL', '全体的に状態が悪い', '状態悪', '状態難'],
+  },
+  {
+    name: 'DSi LL',
+    keywords: ['DSi LL', 'DSiLL'],
+    suffix: '本体',
+    junkOk: false,
+    junkWords: ['ジャンク', '動作未確認', '不動品', '動作不良'],
+    usedWords: ['動作品', '稼働品', '動作確認済', '動作確認済み'],
+    excludeWords: ['全体的に状態が悪い', '状態悪', '状態難'],
+  },
+  {
+    name: '3DS',
+    keywords: ['3DS'],
+    suffix: '本体',
+    junkOk: false,
+    junkWords: ['ジャンク', '動作未確認', '不動品', '動作不良'],
+    usedWords: ['動作品', '稼働品', '動作確認済', '動作確認済み'],
+    excludeWords: ['LL', '全体的に状態が悪い', '状態悪', '状態難'],
+  },
+  {
+    name: '3DS LL',
+    keywords: ['3DS LL', '3DSLL'],
+    suffix: '本体',
+    junkOk: false,
+    junkWords: ['ジャンク', '動作未確認', '不動品', '動作不良'],
+    usedWords: ['動作品', '稼働品', '動作確認済', '動作確認済み'],
+    excludeWords: ['全体的に状態が悪い', '状態悪', '状態難'],
+  },
+  {
+    name: 'PSP 1000',
+    keywords: ['PSP1000', 'PSP-1000', 'PSP 1000'],
+    suffix: '',
+    junkOk: false,
+    junkWords: ['ジャンク', '動作未確認', '不動品', '動作不良'],
+    usedWords: ['動作品', '稼働品', '動作確認済', '動作確認済み'],
+    excludeWords: ['ヤケ', '黄ばみ', '黄変', '全体的に状態が悪い', '状態悪', '状態難'],
+  },
+  {
+    name: 'PSP 2000',
+    keywords: ['PSP2000', 'PSP-2000', 'PSP 2000'],
+    suffix: '',
+    junkOk: false,
+    junkWords: ['ジャンク', '動作未確認', '不動品', '動作不良'],
+    usedWords: ['動作品', '稼働品', '動作確認済', '動作確認済み'],
+    excludeWords: ['ヤケ', '黄ばみ', '黄変', '全体的に状態が悪い', '状態悪', '状態難'],
+  },
+  {
+    name: 'PSP 3000',
+    keywords: ['PSP3000', 'PSP-3000', 'PSP 3000'],
+    suffix: '',
+    junkOk: false,
+    junkWords: ['ジャンク', '動作未確認', '不動品', '動作不良'],
+    usedWords: ['動作品', '稼働品', '動作確認済', '動作確認済み'],
+    excludeWords: ['ヤケ', '黄ばみ', '黄変'],
+  },
 ];
 
-const JUNK_WORDS = ['ジャンク', '動作未確認', '不動品', '動作不良', '現状品', '傷あり'];
-const WORKING_WORDS = ['動作品', '動作確認済', '完動品'];
+function judgeItem(title, description, model) {
+  const text = (title + ' ' + (description || '')).toLowerCase();
 
-const SEARCH_TYPES = [
-  { status: 'ジャンク', istatus: '3,4,5' },
-  { status: '中古', istatus: '2,3' },
-];
+  // Check exclude words
+  for (const word of model.excludeWords) {
+    if (text.includes(word.toLowerCase())) return null;
+  }
 
-async function searchYahooAuction(query, istatus) {
-  const url = `https://auctions.yahoo.co.jp/search/search?p=${encodeURIComponent(query)}&istatus=${istatus}&order=time&f=0x2&ei=UTF-8&tab_ex=commerce`;
+  // Check junk
+  const isJunk = model.junkWords.some(w => text.includes(w.toLowerCase()));
+  if (isJunk && !model.junkOk) return null;
+  if (isJunk) return 'ジャンク';
+
+  // Check used
+  const isUsed = model.usedWords.some(w => text.includes(w.toLowerCase()));
+  if (isUsed) return '中古';
+
+  return '要確認';
+}
+
+async function fetchRSS(keyword) {
+  const url = `https://auctions.yahoo.co.jp/rss/search?p=${encodeURIComponent(keyword)}&auccat=0&va=${encodeURIComponent(keyword)}&vo=&ve=&fixed=0&new=1`;
   const res = await fetch(url, {
-    headers: {
-      'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/120.0.0.0 Safari/537.36',
-      'Accept-Language': 'ja,en;q=0.9',
-    }
+    headers: { 'User-Agent': 'Mozilla/5.0' }
   });
-  const html = await res.text();
-  const $ = cheerio.load(html);
-  const items = [];
-
-  $('li.Product').each((_, el) => {
-    const title = $(el).find('.Product__title').text().trim();
-    const link = $(el).find('a.Product__titleLink').attr('href') || '';
-    const priceText = $(el).find('.Product__priceValue').text().trim().replace(/[^0-9]/g, '');
-    const endTimeText = $(el).find('.Product__time').text().trim();
-    const postageText = $(el).find('.Product__postage').text().trim();
-    const priceLabel = $(el).find('.Product__priceValue').parent().text();
-    const isStore = priceLabel.includes('税込') || $(el).find('.Product__store').length > 0;
-
-    if (!title || !link) return;
-
-    items.push({
-      title,
-      link,
-      price: priceText || '不明',
-      endTime: endTimeText,
-      postage: postageText || '送料不明',
-      isStore,
-    });
-  });
-
+  const xml = await res.text();
+  const parsed = await xml2js.parseStringPromise(xml);
+  const items = parsed?.rss?.channel?.[0]?.item || [];
   return items;
 }
 
@@ -79,35 +169,34 @@ module.exports = async (req, res) => {
     const seen = new Set();
 
     for (const model of MODELS) {
-      for (const searchType of SEARCH_TYPES) {
+      for (const keyword of model.keywords) {
+        const query = model.suffix ? `${keyword} ${model.suffix}` : keyword;
         try {
-          const items = await searchYahooAuction(model.query, searchType.istatus);
+          const items = await fetchRSS(query);
           for (const item of items) {
-            if (seen.has(item.link)) continue;
+            const title = item.title?.[0] || '';
+            const link = item.link?.[0] || '';
+            const price = item['auction:current_price']?.[0] || item['auc:currentprice']?.[0] || '不明';
+            const endTime = item['auction:end_time']?.[0] || item['auc:endtime']?.[0] || '';
+            const description = item.description?.[0] || '';
 
-            const excluded = model.excludeWords.some(w =>
-              item.title.toLowerCase().includes(w.toLowerCase())
-            );
-            if (excluded) continue;
+            if (seen.has(link)) continue;
+            seen.add(link);
 
-            seen.add(item.link);
+            const status = judgeItem(title, description, model);
+            if (status === null) continue;
+
             results.push({
               model: model.name,
-              title: item.title,
-              link: item.link,
-              price: item.price,
-              endTime: item.endTime,
-              status: (() => {
-                if (WORKING_WORDS.some(w => item.title.includes(w))) return '中古';
-                if (JUNK_WORDS.some(w => item.title.includes(w))) return 'ジャンク';
-                return searchType.status;
-              })(),
-              postage: item.postage,
-              isStore: item.isStore,
+              title,
+              link,
+              price,
+              endTime,
+              status,
             });
           }
         } catch (e) {
-          console.error(`Error for ${model.query} / istatus=${searchType.istatus}:`, e.message);
+          console.error(`RSS fetch error for ${query}:`, e.message);
         }
       }
     }
