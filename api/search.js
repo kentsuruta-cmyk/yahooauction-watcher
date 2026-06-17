@@ -5,26 +5,73 @@ const MODELS = [
   {
     name: 'ゲームボーイ（DMG）',
     query: 'ゲームボーイ DMG 本体',
-    keywords: ['ゲームボーイ DMG', 'GAMEBOY DMG', 'ゲームボーイ 初代'],
-    suffix: '本体',
-    junkOk: true,
-    junkWords: ['ジャンク', '動作未確認', '不動品', '動作不良'],
-    usedWords: ['動作品', '稼働品', '動作確認済', '動作確認済み'],
-    excludeWords: ['カラー', 'ポケット', 'アドバンス', 'GBC', 'GBA', 'ソフト', 'カセット', 'ロム', 'ROM', 'ゲームソフト'],
+    excludeWords: ['カラー', 'ポケット', 'アドバンス', 'GBC', 'GBA', 'ソフト', 'カセット', 'ロム', 'ROM', 'ゲームソフト', '全体的に状態が悪い'],
   },
-  { name: 'ゲームボーイカラー', query: 'ゲームボーイカラー 本体', excludeWords: [] },
-  { name: 'ゲームボーイポケット', query: 'ゲームボーイポケット 本体', excludeWords: [] },
-  { name: 'ゲームボーイアドバンス', query: 'ゲームボーイアドバンス 本体', excludeWords: ['SP'] },
-  { name: 'ゲームボーイアドバンスSP', query: 'ゲームボーイアドバンスSP 本体', excludeWords: [] },
-  { name: 'DS', query: 'ニンテンドーDS 本体', excludeWords: ['Lite', 'DSi', 'LL'] },
-  { name: 'DS Lite', query: 'DS Lite 本体', excludeWords: [] },
-  { name: 'DSi', query: 'DSi 本体', excludeWords: ['LL'] },
-  { name: 'DSi LL', query: 'DSi LL 本体', excludeWords: [] },
-  { name: '3DS', query: '3DS 本体', excludeWords: ['LL'] },
-  { name: '3DS LL', query: '3DS LL 本体', excludeWords: [] },
-  { name: 'PSP 1000', query: 'PSP-1000 本体', excludeWords: [] },
-  { name: 'PSP 2000', query: 'PSP-2000 本体', excludeWords: [] },
-  { name: 'PSP 3000', query: 'PSP-3000 本体', excludeWords: [] },
+  {
+    name: 'ゲームボーイカラー',
+    query: 'ゲームボーイカラー 本体',
+    excludeWords: [],
+  },
+  {
+    name: 'ゲームボーイポケット',
+    query: 'ゲームボーイポケット 本体',
+    excludeWords: [],
+  },
+  {
+    name: 'ゲームボーイアドバンス',
+    query: 'ゲームボーイアドバンス 本体',
+    excludeWords: ['SP'],
+  },
+  {
+    name: 'ゲームボーイアドバンスSP',
+    query: 'ゲームボーイアドバンスSP 本体',
+    excludeWords: [],
+  },
+  {
+    name: 'DS',
+    query: 'ニンテンドーDS 本体',
+    excludeWords: ['Lite', 'DSi', 'LL'],
+  },
+  {
+    name: 'DS Lite',
+    query: 'DS Lite 本体',
+    excludeWords: [],
+  },
+  {
+    name: 'DSi',
+    query: 'DSi 本体',
+    excludeWords: ['LL', '全体的に状態が悪い'],
+  },
+  {
+    name: 'DSi LL',
+    query: 'DSi LL 本体',
+    excludeWords: ['全体的に状態が悪い'],
+  },
+  {
+    name: '3DS',
+    query: '3DS 本体',
+    excludeWords: ['LL', '全体的に状態が悪い'],
+  },
+  {
+    name: '3DS LL',
+    query: '3DS LL 本体',
+    excludeWords: [],
+  },
+  {
+    name: 'PSP 1000',
+    query: 'PSP-1000 本体',
+    excludeWords: ['全体的に状態が悪い'],
+  },
+  {
+    name: 'PSP 2000',
+    query: 'PSP-2000 本体',
+    excludeWords: ['全体的に状態が悪い'],
+  },
+  {
+    name: 'PSP 3000',
+    query: 'PSP-3000 本体',
+    excludeWords: [],
+  },
 ];
 
 const JUNK_WORDS = ['ジャンク', '動作未確認', '不動品', '動作不良', '現状品', '傷あり'];
