@@ -30,7 +30,7 @@ const MODELS = [
   {
     name: 'DS',
     query: 'ニンテンドーDS 本体',
-    excludeWords: ['Lite', 'DSi', 'LL','全体的に状態が悪い'],
+    excludeWords: ['Lite', 'DSi', 'LL', '全体的に状態が悪い'],
   },
   {
     name: 'DS Lite',
@@ -82,6 +82,41 @@ const SEARCH_TYPES = [
   { status: '中古', istatus: '2,3' },
 ];
 
+function parseEndTime(endTimeText) {
+  if (!endTimeText) return null;
+  const now = new Date();
+
+  // 「残り○日」「残り○時間」形式
+  const daysMatch = endTimeText.match(/残り(\d+)日/);
+  const hoursMatch = endTimeText.match(/残り(\d+)時間/);
+  const minutesMatch = endTimeText.match(/残り(\d+)分/);
+
+  if (daysMatch || hoursMatch || minutesMatch) {
+    // 残り時間があれば終了していない
+    return new Date(now.getTime() + 1000);
+  }
+
+  // 「終了」「落札」などの文字があれば終了済み
+  if (endTimeText.includes('終了') || endTimeText.includes('落札')) {
+    return new Date(0);
+  }
+
+  // 日時形式（例：6月17日 23:59）
+  const dateMatch = endTimeText.match(/(\d+)月(\d+)日\s*(\d+):(\d+)/);
+  if (dateMatch) {
+    const month = parseInt(dateMatch[1]) - 1;
+    const day = parseInt(dateMatch[2]);
+    const hour = parseInt(dateMatch[3]);
+    const min = parseInt(dateMatch[4]);
+    const year = now.getFullYear();
+    const endDate = new Date(year, month, day, hour, min);
+    if (endDate < now) endDate.setFullYear(year + 1);
+    return endDate;
+  }
+
+  return null;
+}
+
 async function searchYahooAuction(query, istatus) {
   const url = `https://auctions.yahoo.co.jp/search/search?p=${encodeURIComponent(query)}&istatus=${istatus}&order=time&f=0x2&ei=UTF-8&tab_ex=commerce`;
   const res = await fetch(url, {
@@ -104,6 +139,14 @@ async function searchYahooAuction(query, istatus) {
     const isStore = priceLabel.includes('税込') || $(el).find('.Product__store').length > 0;
 
     if (!title || !link) return;
+
+    // 終了済みチェック
+    const endTime = parseEndTime(endTimeText);
+    const now = new Date();
+    if (endTime && endTime <= now) return;
+
+    // 「終了」の文字が含まれていたらスキップ
+    if (endTimeText.includes('終了') || endTimeText.includes('落札済み')) return;
 
     items.push({
       title,
