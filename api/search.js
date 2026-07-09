@@ -6,71 +6,85 @@ const MODELS = [
     name: 'ゲームボーイ（DMG）',
     query: 'ゲームボーイ DMG 本体',
     excludeWords: ['カラー', 'ポケット', 'アドバンス', 'GBC', 'GBA', 'ソフト', 'カセット', 'ロム', 'ROM', 'ゲームソフト', '全体的に状態が悪い'],
+    priceLimits: null,
   },
   {
     name: 'ゲームボーイカラー',
     query: 'ゲームボーイカラー 本体',
     excludeWords: [],
+    priceLimits: null,
   },
   {
     name: 'ゲームボーイポケット',
     query: 'ゲームボーイポケット 本体',
     excludeWords: [],
+    priceLimits: null,
   },
   {
     name: 'ゲームボーイアドバンス',
     query: 'ゲームボーイアドバンス 本体',
     excludeWords: ['SP'],
+    priceLimits: { '中古': 7100, 'ジャンク': 6100 },
   },
   {
     name: 'ゲームボーイアドバンスSP',
     query: 'ゲームボーイアドバンスSP 本体',
     excludeWords: [],
+    priceLimits: { '中古': 10500 },
   },
   {
     name: 'DS',
     query: 'ニンテンドーDS 本体',
     excludeWords: ['Lite', 'DSi', 'LL', '全体的に状態が悪い'],
+    priceLimits: null,
   },
   {
     name: 'DS Lite',
     query: 'DS Lite 本体',
     excludeWords: ['全体的に状態が悪い'],
+    priceLimits: null,
   },
   {
     name: 'DSi',
     query: 'DSi 本体',
     excludeWords: ['LL', '全体的に状態が悪い'],
+    priceLimits: null,
   },
   {
     name: 'DSi LL',
     query: 'DSi LL 本体',
     excludeWords: ['全体的に状態が悪い'],
+    priceLimits: null,
   },
   {
     name: '3DS',
     query: '3DS 本体',
     excludeWords: ['LL', '全体的に状態が悪い'],
+    priceLimits: null,
   },
   {
     name: '3DS LL',
     query: '3DS LL 本体',
     excludeWords: ['全体的に状態が悪い'],
+    priceLimits: null,
   },
   {
     name: 'PSP 1000',
     query: 'PSP-1000 本体',
     excludeWords: ['全体的に状態が悪い'],
+    priceLimits: null,
   },
   {
     name: 'PSP 2000',
     query: 'PSP-2000 本体',
     excludeWords: ['全体的に状態が悪い'],
+    priceLimits: null,
   },
   {
     name: 'PSP 3000',
     query: 'PSP-3000 本体',
     excludeWords: [],
+    priceLimits: null,
   },
 ];
 
@@ -86,22 +100,18 @@ function parseEndTime(endTimeText) {
   if (!endTimeText) return null;
   const now = new Date();
 
-  // 「残り○日」「残り○時間」形式
   const daysMatch = endTimeText.match(/残り(\d+)日/);
   const hoursMatch = endTimeText.match(/残り(\d+)時間/);
   const minutesMatch = endTimeText.match(/残り(\d+)分/);
 
   if (daysMatch || hoursMatch || minutesMatch) {
-    // 残り時間があれば終了していない
     return new Date(now.getTime() + 1000);
   }
 
-  // 「終了」「落札」などの文字があれば終了済み
   if (endTimeText.includes('終了') || endTimeText.includes('落札')) {
     return new Date(0);
   }
 
-  // 日時形式（例：6月17日 23:59）
   const dateMatch = endTimeText.match(/(\d+)月(\d+)日\s*(\d+):(\d+)/);
   if (dateMatch) {
     const month = parseInt(dateMatch[1]) - 1;
@@ -115,6 +125,38 @@ function parseEndTime(endTimeText) {
   }
 
   return null;
+}
+
+// 送料を計算する（円）
+function calcShipping(postageText) {
+  if (!postageText) return { amount: 1000, note: '送料不明（仮1000円）' };
+  const text = postageText.trim();
+
+  if (text.includes('無料')) return { amount: 0, note: '送料無料' };
+  if (text.includes('着払い')) return { amount: 1000, note: '着払い（仮1000円）' };
+
+  // 具体的な金額が入っている場合（例: 「送料：750円」）
+  const numMatch = text.match(/([0-9,]+)\s*円/);
+  if (numMatch) {
+    const amount = parseInt(numMatch[1].replace(/,/g, ''));
+    return { amount, note: `送料${amount}円` };
+  }
+
+  // それ以外は不明として仮1000円
+  return { amount: 1000, note: '送料不明（仮1000円）' };
+}
+
+// 消費税を計算し、最終価格を算出
+function calcFinalPrice(priceText, taxLabel) {
+  const price = parseInt((priceText || '0').replace(/[^0-9]/g, '')) || 0;
+  let taxMultiplier = 1; // デフォルトは税込（個人出品扱い）
+
+  if (taxLabel) {
+    if (taxLabel.includes('消費税別')) taxMultiplier = 1.10;
+    else if (taxLabel.includes('消費税0円') || taxLabel.includes('消費税込')) taxMultiplier = 1;
+  }
+
+  return Math.round(price * taxMultiplier);
 }
 
 async function searchYahooAuction(query, istatus) {
@@ -132,29 +174,27 @@ async function searchYahooAuction(query, istatus) {
   $('li.Product').each((_, el) => {
     const title = $(el).find('.Product__title').text().trim();
     const link = $(el).find('a.Product__titleLink').attr('href') || '';
-    const priceText = $(el).find('.Product__priceValue').text().trim().replace(/[^0-9]/g, '');
+    const priceText = $(el).find('.Product__priceValue').text().trim();
     const endTimeText = $(el).find('.Product__time').text().trim();
     const postageText = $(el).find('.Product__postage').text().trim();
     const priceLabel = $(el).find('.Product__priceValue').parent().text();
-    const isStore = priceLabel.includes('税込') || $(el).find('.Product__store').length > 0;
+    const isStore = priceLabel.includes('税込') || priceLabel.includes('消費税') || $(el).find('.Product__store').length > 0;
 
     if (!title || !link) return;
 
-    // 終了済みチェック
     const endTime = parseEndTime(endTimeText);
     const now = new Date();
     if (endTime && endTime <= now) return;
-
-    // 「終了」の文字が含まれていたらスキップ
     if (endTimeText.includes('終了') || endTimeText.includes('落札済み')) return;
 
     items.push({
       title,
       link,
-      price: priceText || '不明',
+      priceText,
       endTime: endTimeText,
-      postage: postageText || '送料不明',
+      postageText: postageText || '',
       isStore,
+      taxLabel: priceLabel,
     });
   });
 
@@ -181,19 +221,36 @@ module.exports = async (req, res) => {
             if (excluded) continue;
 
             seen.add(item.link);
+
+            const status = (() => {
+              if (WORKING_WORDS.some(w => item.title.includes(w))) return '中古';
+              if (JUNK_WORDS.some(w => item.title.includes(w))) return 'ジャンク';
+              return searchType.status;
+            })();
+
+            const basePrice = calcFinalPrice(item.priceText, item.taxLabel);
+            const shipping = calcShipping(item.postageText);
+            const finalPrice = basePrice + shipping.amount;
+
+            // 上限価格チェック
+            if (model.priceLimits) {
+              const limit = model.priceLimits[status];
+              if (limit === undefined) continue; // この状態は対象外
+              if (finalPrice > limit) continue; // 上限超過
+            }
+
             results.push({
               model: model.name,
               title: item.title,
               link: item.link,
-              price: item.price,
+              price: basePrice,
+              finalPrice,
+              shippingNote: shipping.note,
               endTime: item.endTime,
-              status: (() => {
-                if (WORKING_WORDS.some(w => item.title.includes(w))) return '中古';
-                if (JUNK_WORDS.some(w => item.title.includes(w))) return 'ジャンク';
-                return searchType.status;
-              })(),
-              postage: item.postage,
+              status,
+              postage: item.postageText || '送料不明',
               isStore: item.isStore,
+              priceLimit: model.priceLimits ? model.priceLimits[status] : null,
             });
           }
         } catch (e) {
