@@ -34,7 +34,7 @@ const MODELS = [
     name: 'ゲームボーイアドバンスSP',
     query: 'ゲームボーイアドバンスSP 本体',
     excludeWords: [],
-    priceLimits: { '中古': 10500 },
+    priceLimits: { '中古': 10500, 'ジャンク': 9500 },
   },
   {
     name: 'DS',
@@ -181,10 +181,12 @@ async function searchYahooAuction(query, istatus) {
   $('li.Product').each((_, el) => {
     const title = $(el).find('.Product__title').text().trim();
     const link = $(el).find('a.Product__titleLink').attr('href') || '';
-    const priceText = $(el).find('.Product__priceValue').text().trim();
+    // 1出品に .Product__priceValue が複数（現在・即決）あるため .first() で現在価格のみ取る
+    // （.text() のままだと「9,000円9,000円」が連結され 90009000 円になる）
+    const priceText = $(el).find('.Product__priceValue').first().text().trim();
     const endTimeText = $(el).find('.Product__time').text().trim();
     const postageText = $(el).find('.Product__postage').text().trim();
-    const priceLabel = $(el).find('.Product__priceValue').parent().text();
+    const priceLabel = $(el).find('.Product__priceValue').first().parent().text();
     const isStore = priceLabel.includes('税込') || priceLabel.includes('消費税') || $(el).find('.Product__store').length > 0;
 
     if (!title || !link) return;
