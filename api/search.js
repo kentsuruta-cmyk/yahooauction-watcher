@@ -4,26 +4,30 @@ const cheerio = require('cheerio');
 const MODELS = [
   {
     name: 'ゲームボーイ（DMG）',
-    query: 'ゲームボーイ DMG 本体',
-    excludeWords: ['カラー', 'ポケット', 'アドバンス', 'GBC', 'GBA', 'ソフト', 'カセット', 'ロム', 'ROM', 'ゲームソフト', '全体的に状態が悪い'],
+    query: 'ゲームボーイ DMG 本体 -ジャンク -動作未確認',
+    excludeWords: ['カラー', 'ポケット', 'アドバンス', 'GBC', 'GBA', 'ソフト', 'カセット', 'ロム', 'ROM', 'ゲームソフト'],
     priceLimits: null,
+    excludeJunk: true,
   },
   {
     name: 'ゲームボーイカラー',
-    query: 'ゲームボーイカラー 本体 -ジャンク',
+    query: 'ゲームボーイカラー 本体 -ジャンク -動作未確認',
     excludeWords: [],
     priceLimits: null,
+    excludeJunk: true,
     // 状態は「やや傷や汚れあり」まで（6:傷や汚れあり / 7:全体的に状態が悪い は除外）
     searchTypes: [{ status: '中古', istatus: '3,4,5' }],
   },
   {
     name: 'ゲームボーイポケット',
-    query: 'ゲームボーイポケット 本体 -ジャンク',
+    query: 'ゲームボーイポケット 本体 -ジャンク -動作未確認',
     excludeWords: [],
     priceLimits: null,
+    excludeJunk: true,
     // 状態は「やや傷や汚れあり」まで（6:傷や汚れあり / 7:全体的に状態が悪い は除外）
     searchTypes: [{ status: '中古', istatus: '3,4,5' }],
   },
+  // ▼ アドバンス系はジャンクも仕入れ対象なので除外しない（上限価格で絞る）
   {
     name: 'ゲームボーイアドバンス',
     query: 'ゲームボーイアドバンス 本体',
@@ -38,62 +42,76 @@ const MODELS = [
   },
   {
     name: 'DS',
-    query: 'ニンテンドーDS 本体',
-    excludeWords: ['Lite', 'DSi', 'LL', '全体的に状態が悪い'],
+    query: 'ニンテンドーDS 本体 -ジャンク -動作未確認',
+    excludeWords: ['Lite', 'DSi', 'LL'],
     priceLimits: null,
+    excludeJunk: true,
   },
   {
     name: 'DS Lite',
-    query: 'DS Lite 本体',
-    excludeWords: ['全体的に状態が悪い'],
+    query: 'DS Lite 本体 -ジャンク -動作未確認',
+    excludeWords: [],
     priceLimits: null,
+    excludeJunk: true,
   },
   {
     name: 'DSi',
-    query: 'DSi 本体',
-    excludeWords: ['LL', '全体的に状態が悪い'],
+    query: 'DSi 本体 -ジャンク -動作未確認',
+    excludeWords: ['LL'],
     priceLimits: null,
+    excludeJunk: true,
   },
   {
     name: 'DSi LL',
-    query: 'DSi LL 本体',
-    excludeWords: ['全体的に状態が悪い'],
+    query: 'DSi LL 本体 -ジャンク -動作未確認',
+    excludeWords: [],
     priceLimits: null,
+    excludeJunk: true,
   },
   {
     name: '3DS',
-    query: '3DS 本体',
-    excludeWords: ['LL', '全体的に状態が悪い'],
+    query: '3DS 本体 -ジャンク -動作未確認',
+    excludeWords: ['LL'],
     priceLimits: null,
+    excludeJunk: true,
   },
   {
     name: '3DS LL',
-    query: '3DS LL 本体',
-    excludeWords: ['全体的に状態が悪い'],
+    query: '3DS LL 本体 -ジャンク -動作未確認',
+    excludeWords: [],
     priceLimits: null,
+    excludeJunk: true,
   },
   {
     name: 'PSP 1000',
-    query: 'PSP-1000 本体',
-    excludeWords: ['全体的に状態が悪い'],
+    query: 'PSP-1000 本体 -ジャンク -動作未確認',
+    excludeWords: [],
     priceLimits: null,
+    excludeJunk: true,
   },
   {
     name: 'PSP 2000',
-    query: 'PSP-2000 本体',
-    excludeWords: ['全体的に状態が悪い'],
+    query: 'PSP-2000 本体 -ジャンク -動作未確認',
+    excludeWords: [],
     priceLimits: null,
+    excludeJunk: true,
   },
   {
     name: 'PSP 3000',
-    query: 'PSP-3000 本体',
+    query: 'PSP-3000 本体 -ジャンク -動作未確認',
     excludeWords: [],
     priceLimits: null,
+    excludeJunk: true,
   },
 ];
 
 const JUNK_WORDS = ['ジャンク', '動作未確認', '不動品', '動作不良', '現状品', '傷あり'];
 const WORKING_WORDS = ['動作品', '動作確認済', '完動品'];
+
+// excludeJunk: true のモデルで、タイトルに含まれていたら除外するワード。
+// 検索クエリ側の -ジャンク -動作未確認 で大半は落ちるが、取りこぼしの保険として二重に弾く。
+// ※「現状品」「傷あり」は動作不良を意味しないため、ここには入れていない（ジャンク表示は残る）
+const NG_WORDS = ['ジャンク', '動作未確認', '不動品', '動作不良'];
 
 // 商品の状態(istatus): 1=未使用 2=中古（すべて） 3=未使用に近い 4=目立った傷や汚れなし
 //                      5=やや傷や汚れあり 6=傷や汚れあり 7=全体的に状態が悪い
@@ -224,7 +242,10 @@ module.exports = async (req, res) => {
           for (const item of items) {
             if (seen.has(item.link)) continue;
 
-            const excluded = model.excludeWords.some(w =>
+            const ngWords = model.excludeJunk
+              ? model.excludeWords.concat(NG_WORDS)
+              : model.excludeWords;
+            const excluded = ngWords.some(w =>
               item.title.toLowerCase().includes(w.toLowerCase())
             );
             if (excluded) continue;
@@ -234,6 +255,9 @@ module.exports = async (req, res) => {
             const status = (() => {
               if (WORKING_WORDS.some(w => item.title.includes(w))) return '中古';
               if (JUNK_WORDS.some(w => item.title.includes(w))) return 'ジャンク';
+              // ジャンクを除外しているモデルは、どの検索枠で拾ったかに関わらず中古扱い
+              // （旧実装はジャンク枠でヒットしただけの正常な出品まで「ジャンク」表示にしていた）
+              if (model.excludeJunk) return '中古';
               return searchType.status;
             })();
 
