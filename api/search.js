@@ -10,15 +10,19 @@ const MODELS = [
   },
   {
     name: 'ゲームボーイカラー',
-    query: 'ゲームボーイカラー 本体',
+    query: 'ゲームボーイカラー 本体 -ジャンク',
     excludeWords: [],
     priceLimits: null,
+    // 状態は「やや傷や汚れあり」まで（6:傷や汚れあり / 7:全体的に状態が悪い は除外）
+    searchTypes: [{ status: '中古', istatus: '3,4,5' }],
   },
   {
     name: 'ゲームボーイポケット',
-    query: 'ゲームボーイポケット 本体',
+    query: 'ゲームボーイポケット 本体 -ジャンク',
     excludeWords: [],
     priceLimits: null,
+    // 状態は「やや傷や汚れあり」まで（6:傷や汚れあり / 7:全体的に状態が悪い は除外）
+    searchTypes: [{ status: '中古', istatus: '3,4,5' }],
   },
   {
     name: 'ゲームボーイアドバンス',
@@ -91,6 +95,9 @@ const MODELS = [
 const JUNK_WORDS = ['ジャンク', '動作未確認', '不動品', '動作不良', '現状品', '傷あり'];
 const WORKING_WORDS = ['動作品', '動作確認済', '完動品'];
 
+// 商品の状態(istatus): 1=未使用 2=中古（すべて） 3=未使用に近い 4=目立った傷や汚れなし
+//                      5=やや傷や汚れあり 6=傷や汚れあり 7=全体的に状態が悪い
+// ※ 2 は「中古すべて」なので 6・7 も含んでしまう。状態を絞りたいモデルでは 2 を使わない
 const SEARCH_TYPES = [
   { status: 'ジャンク', istatus: '3,4,5' },
   { status: '中古', istatus: '2,3' },
@@ -209,7 +216,7 @@ module.exports = async (req, res) => {
     const seen = new Set();
 
     for (const model of MODELS) {
-      for (const searchType of SEARCH_TYPES) {
+      for (const searchType of (model.searchTypes || SEARCH_TYPES)) {
         try {
           const items = await searchYahooAuction(model.query, searchType.istatus);
           for (const item of items) {
