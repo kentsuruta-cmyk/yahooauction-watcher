@@ -80,7 +80,9 @@ const MODELS = [
     categories: [8904], // 本体(SP)
     query: 'ゲームボーイアドバンスSP 本体',
     excludeWords: [],
-    priceLimits: { '中古': 10500, 'ジャンク': 9500 },
+    // 総額（送料込み）で 6500〜8400円。中古・ジャンクとも同じレンジ
+    priceLimits: { '中古': 8400, 'ジャンク': 8400 },
+    priceMins: { '中古': 6500, 'ジャンク': 6500 },
   },
   {
     name: 'DS',
