@@ -33,6 +33,8 @@ const MODELS = [
     excludeWords: ['カラー', 'ポケット', 'アドバンス', 'GBC', 'GBA', 'ソフト', 'カセット', 'ロム', 'ROM', 'ゲームソフト'],
     priceLimits: null,
     excludeJunk: true,
+    // 状態は「やや傷や汚れあり」まで（メルカリの itemConditionId 2〜4）
+    searchTypes: [{ status: '中古', istatus: '3,4,5' }],
   },
   {
     name: 'ゲームボーイカラー',
@@ -83,6 +85,8 @@ const MODELS = [
     excludeWords: ['Lite', 'DSi', 'LL'],
     priceLimits: null,
     excludeJunk: true,
+    // 状態は「やや傷や汚れあり」まで（メルカリの itemConditionId 2〜4）
+    searchTypes: [{ status: '中古', istatus: '3,4,5' }],
   },
   {
     name: 'DS Lite',
@@ -91,6 +95,8 @@ const MODELS = [
     excludeWords: [],
     priceLimits: null,
     excludeJunk: true,
+    // 状態は「やや傷や汚れあり」まで（メルカリの itemConditionId 2〜4）
+    searchTypes: [{ status: '中古', istatus: '3,4,5' }],
   },
   {
     name: 'DSi',
@@ -99,6 +105,8 @@ const MODELS = [
     excludeWords: ['LL'],
     priceLimits: null,
     excludeJunk: true,
+    // 状態は「やや傷や汚れあり」まで（メルカリの itemConditionId 2〜4）
+    searchTypes: [{ status: '中古', istatus: '3,4,5' }],
   },
   {
     name: 'DSi LL',
@@ -107,6 +115,8 @@ const MODELS = [
     excludeWords: [],
     priceLimits: null,
     excludeJunk: true,
+    // 状態は「やや傷や汚れあり」まで（メルカリの itemConditionId 2〜4）
+    searchTypes: [{ status: '中古', istatus: '3,4,5' }],
   },
   {
     name: '3DS',
@@ -115,14 +125,20 @@ const MODELS = [
     excludeWords: ['LL'],
     priceLimits: null,
     excludeJunk: true,
+    // 状態は「やや傷や汚れあり」まで（メルカリの itemConditionId 2〜4）
+    searchTypes: [{ status: '中古', istatus: '3,4,5' }],
   },
   {
     name: '3DS LL',
     categories: [7038, 8882], // 本体(3DS LL) / 本体(New 3DS LL)
     query: '3DS LL 本体 -ジャンク -動作未確認',
     excludeWords: [],
-    priceLimits: null,
+    // 総額（送料込み）で 15000〜18000円
+    priceLimits: { '中古': 18000 },
+    priceMins: { '中古': 15000 },
     excludeJunk: true,
+    // 状態は「やや傷や汚れあり」まで（メルカリの itemConditionId 2〜4）
+    searchTypes: [{ status: '中古', istatus: '3,4,5' }],
   },
   {
     name: 'PSP 1000',
@@ -131,6 +147,8 @@ const MODELS = [
     excludeWords: [],
     priceLimits: null,
     excludeJunk: true,
+    // 状態は「やや傷や汚れあり」まで（メルカリの itemConditionId 2〜4）
+    searchTypes: [{ status: '中古', istatus: '3,4,5' }],
   },
   {
     name: 'PSP 2000',
@@ -139,6 +157,8 @@ const MODELS = [
     excludeWords: [],
     priceLimits: null,
     excludeJunk: true,
+    // 状態は「やや傷や汚れあり」まで（メルカリの itemConditionId 2〜4）
+    searchTypes: [{ status: '中古', istatus: '3,4,5' }],
   },
   {
     name: 'PSP 3000',
@@ -147,6 +167,8 @@ const MODELS = [
     excludeWords: [],
     priceLimits: null,
     excludeJunk: true,
+    // 状態は「やや傷や汚れあり」まで（メルカリの itemConditionId 2〜4）
+    searchTypes: [{ status: '中古', istatus: '3,4,5' }],
   },
 ];
 

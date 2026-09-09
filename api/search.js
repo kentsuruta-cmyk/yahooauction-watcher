@@ -8,6 +8,8 @@ const MODELS = [
     excludeWords: ['カラー', 'ポケット', 'アドバンス', 'GBC', 'GBA', 'ソフト', 'カセット', 'ロム', 'ROM', 'ゲームソフト'],
     priceLimits: null,
     excludeJunk: true,
+    // 状態は「やや傷や汚れあり」まで（6:傷や汚れあり / 7:全体的に状態が悪い は除外）
+    searchTypes: [{ status: '中古', istatus: '3,4,5' }],
   },
   {
     name: 'ゲームボーイカラー',
@@ -35,9 +37,9 @@ const MODELS = [
     name: 'ゲームボーイアドバンス',
     query: 'ゲームボーイアドバンス 本体',
     excludeWords: ['SP'],
-    // 総額（落札価格＋送料）で 中古 5500〜7200円 / ジャンク 5000〜6200円
+    // 総額（落札価格＋送料）で 中古 7200円まで / ジャンク 6200円まで
+    // ※下限はメルカリ側のみ。ヤフオクは入札で価格が上がるので現在価格に下限をかけない
     priceLimits: { '中古': 7200, 'ジャンク': 6200 },
-    priceMins: { '中古': 5500, 'ジャンク': 5000 },
   },
   {
     name: 'ゲームボーイアドバンスSP',
@@ -51,6 +53,8 @@ const MODELS = [
     excludeWords: ['Lite', 'DSi', 'LL'],
     priceLimits: null,
     excludeJunk: true,
+    // 状態は「やや傷や汚れあり」まで（6:傷や汚れあり / 7:全体的に状態が悪い は除外）
+    searchTypes: [{ status: '中古', istatus: '3,4,5' }],
   },
   {
     name: 'DS Lite',
@@ -58,6 +62,8 @@ const MODELS = [
     excludeWords: [],
     priceLimits: null,
     excludeJunk: true,
+    // 状態は「やや傷や汚れあり」まで（6:傷や汚れあり / 7:全体的に状態が悪い は除外）
+    searchTypes: [{ status: '中古', istatus: '3,4,5' }],
   },
   {
     name: 'DSi',
@@ -65,6 +71,8 @@ const MODELS = [
     excludeWords: ['LL'],
     priceLimits: null,
     excludeJunk: true,
+    // 状態は「やや傷や汚れあり」まで（6:傷や汚れあり / 7:全体的に状態が悪い は除外）
+    searchTypes: [{ status: '中古', istatus: '3,4,5' }],
   },
   {
     name: 'DSi LL',
@@ -72,6 +80,8 @@ const MODELS = [
     excludeWords: [],
     priceLimits: null,
     excludeJunk: true,
+    // 状態は「やや傷や汚れあり」まで（6:傷や汚れあり / 7:全体的に状態が悪い は除外）
+    searchTypes: [{ status: '中古', istatus: '3,4,5' }],
   },
   {
     name: '3DS',
@@ -79,13 +89,18 @@ const MODELS = [
     excludeWords: ['LL'],
     priceLimits: null,
     excludeJunk: true,
+    // 状態は「やや傷や汚れあり」まで（6:傷や汚れあり / 7:全体的に状態が悪い は除外）
+    searchTypes: [{ status: '中古', istatus: '3,4,5' }],
   },
   {
     name: '3DS LL',
     query: '3DS LL 本体 -ジャンク -動作未確認',
     excludeWords: [],
-    priceLimits: null,
+    // 総額（落札価格＋送料）で18000円まで
+    priceLimits: { '中古': 18000 },
     excludeJunk: true,
+    // 状態は「やや傷や汚れあり」まで（6:傷や汚れあり / 7:全体的に状態が悪い は除外）
+    searchTypes: [{ status: '中古', istatus: '3,4,5' }],
   },
   {
     name: 'PSP 1000',
@@ -93,6 +108,8 @@ const MODELS = [
     excludeWords: [],
     priceLimits: null,
     excludeJunk: true,
+    // 状態は「やや傷や汚れあり」まで（6:傷や汚れあり / 7:全体的に状態が悪い は除外）
+    searchTypes: [{ status: '中古', istatus: '3,4,5' }],
   },
   {
     name: 'PSP 2000',
@@ -100,6 +117,8 @@ const MODELS = [
     excludeWords: [],
     priceLimits: null,
     excludeJunk: true,
+    // 状態は「やや傷や汚れあり」まで（6:傷や汚れあり / 7:全体的に状態が悪い は除外）
+    searchTypes: [{ status: '中古', istatus: '3,4,5' }],
   },
   {
     name: 'PSP 3000',
@@ -107,6 +126,8 @@ const MODELS = [
     excludeWords: [],
     priceLimits: null,
     excludeJunk: true,
+    // 状態は「やや傷や汚れあり」まで（6:傷や汚れあり / 7:全体的に状態が悪い は除外）
+    searchTypes: [{ status: '中古', istatus: '3,4,5' }],
   },
 ];
 
@@ -278,6 +299,8 @@ module.exports = async (req, res) => {
             }
 
             // 下限価格チェック（その状態の下限が未設定なら下限なし）
+            // ※現状ヤフオク側で priceMins を使っているモデルは無い（入札で価格が上がるため）。
+            //   必要になったら MODELS に priceMins を書けばそのまま効く
             if (model.priceMins) {
               const min = model.priceMins[status];
               if (min !== undefined && finalPrice < min) continue; // 下限未満
