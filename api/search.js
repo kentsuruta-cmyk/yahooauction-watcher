@@ -78,7 +78,8 @@ const MODELS = [
     name: 'DSi LL',
     query: 'DSi LL 本体 -ジャンク -動作未確認',
     excludeWords: [],
-    priceLimits: null,
+    // 総額（落札価格＋送料）で7700円まで
+    priceLimits: { '中古': 7700 },
     excludeJunk: true,
     // 状態は「やや傷や汚れあり」まで（6:傷や汚れあり / 7:全体的に状態が悪い は除外）
     searchTypes: [{ status: '中古', istatus: '3,4,5' }],
