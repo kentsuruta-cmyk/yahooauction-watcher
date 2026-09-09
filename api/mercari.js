@@ -101,9 +101,9 @@ const MODELS = [
     categories: [8899], // 本体(DS Lite)
     query: 'DS Lite 本体 -ジャンク -動作未確認',
     excludeWords: [],
-    // 総額（送料込み）で 3300〜4500円
+    // 総額（送料込み）で 3600〜4500円
     priceLimits: { '中古': 4500 },
-    priceMins: { '中古': 3300 },
+    priceMins: { '中古': 3600 },
     excludeJunk: true,
     // 状態は「やや傷や汚れあり」まで（メルカリの itemConditionId 2〜4）
     searchTypes: [{ status: '中古', istatus: '3,4,5' }],
