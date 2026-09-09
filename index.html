@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>KENJAGAMES // Yahoo Auction Watcher</title>
+<title>KENJAGAMES // Auction Watcher</title>
 <style>
 * { margin: 0; padding: 0; box-sizing: border-box; }
 body { background: #f5f5f5; color: #111; font-family: 'Courier New', monospace; }
@@ -46,20 +46,30 @@ td a:hover { text-decoration: underline; }
 .status { text-align: center; padding: 40px; color: #888; font-size: 13px; }
 .progress { color: #e0003c; font-size: 12px; text-align: center; padding: 20px; }
 .note { color: #aaa; font-size: 11px; margin-bottom: 12px; }
+.tabs { display: flex; background: #fff; border-bottom: 1px solid #ddd; padding: 0 40px; }
+.tab { background: none; border: none; border-bottom: 3px solid transparent; padding: 14px 26px; font-family: 'Courier New', monospace; font-size: 13px; letter-spacing: 2px; color: #888; cursor: pointer; transition: all 0.2s; }
+.tab:hover { color: #e0003c; }
+.tab.active { color: #e0003c; border-bottom-color: #e0003c; font-weight: bold; }
+.cond { color: #999; font-size: 10px; margin-top: 3px; }
 </style>
 </head>
 <body>
 <header>
-<h1>KENJAGAMES // Yahoo Auction Watcher</h1>
-<p>ヤフオク新着ゲーム機モニタリングツール</p>
+<h1>KENJAGAMES // Auction Watcher</h1>
+<p id="headerNote">ヤフオク新着ゲーム機モニタリングツール</p>
 </header>
+<div class="tabs">
+<button class="tab active" id="tab-yahoo" onclick="switchTab('yahoo')">ヤフオク</button>
+<button class="tab" id="tab-mercari" onclick="switchTab('mercari')">メルカリ</button>
+</div>
 <div class="container">
 <div class="card">
 <h2>▸ MONITOR CONFIG</h2>
-<p style="color:#888; font-size:12px; margin-bottom:16px;">
+<p style="color:#888; font-size:12px; margin-bottom:8px;">
 監視対象：DMG / GBC / GBP / GBA / GBA SP / DS / DS Lite / DSi / DSi LL / 3DS / 3DS LL / PSP 1000・2000・3000
 </p>
-<button class="search-btn" id="searchBtn" onclick="startSearch()">🔍 新着を検索する</button>
+<p id="configNote" style="color:#aaa; font-size:11px; margin-bottom:16px;"></p>
+<button class="search-btn" id="searchBtn" onclick="startSearch()">🔍 ヤフオクの新着を検索する</button>
 </div>
 <div class="card" id="resultsCard" style="display:none;">
 <div class="results-header">
@@ -73,7 +83,7 @@ td a:hover { text-decoration: underline; }
 <button class="clear-btn" onclick="clearChecked()">チェックをリセット</button>
 </div>
 </div>
-<p class="note">※価格はヤフオク表示価格です。</p>
+<p class="note" id="resultNote">※価格はヤフオク表示価格です。</p>
 <div id="progressLog"></div>
 <div id="resultsBody"></div>
 </div>
@@ -84,6 +94,68 @@ let currentFilter = 'all';
 let hideChecked = false;
 let checkedIds = new Set();
 
+// タブごとの違いはここに集約。テーブル描画などの処理は両タブで共通のものを使う。
+var SOURCES = {
+  yahoo: {
+    label: 'ヤフオク',
+    endpoint: '/api/search',
+    headerNote: 'ヤフオク新着ゲーム機モニタリングツール',
+    configNote: '',
+    resultNote: '※価格はヤフオク表示価格です。',
+    timeHeader: '残り時間',
+    loading: 'ヤフオクから新着を取得中...',
+    idOf: function (link) {
+      var m = link.match(/\/auction\/([a-z0-9]+)/i);
+      return m ? m[1] : link;
+    },
+  },
+  mercari: {
+    label: 'メルカリ',
+    endpoint: '/api/mercari',
+    headerNote: 'メルカリ新着ゲーム機モニタリングツール',
+    configNote: '※メルカリは「送料込み」の出品のみ、各機種の「本体」カテゴリに限定して抽出します。',
+    resultNote: '※送料込みの出品のみを対象にしているため、表示価格がそのまま総額です。',
+    timeHeader: '出品',
+    loading: 'メルカリから新着を取得中...',
+    idOf: function (link) {
+      var m = link.match(/\/(?:item|shops\/product)\/([A-Za-z0-9]+)/);
+      return m ? m[1] : link;
+    },
+  },
+};
+
+var currentSource = 'yahoo';
+// 取得済みの結果はタブごとに保持し、タブを戻したときに再検索しなくて済むようにする
+var resultCache = { yahoo: null, mercari: null };
+
+function source() { return SOURCES[currentSource]; }
+
+async function switchTab(name) {
+  if (name === currentSource) return;
+  currentSource = name;
+
+  document.getElementById('tab-yahoo').classList.toggle('active', name === 'yahoo');
+  document.getElementById('tab-mercari').classList.toggle('active', name === 'mercari');
+  document.getElementById('headerNote').textContent = source().headerNote;
+  document.getElementById('configNote').textContent = source().configNote;
+  document.getElementById('resultNote').textContent = source().resultNote;
+  document.getElementById('searchBtn').textContent = '🔍 ' + source().label + 'の新着を検索する';
+
+  currentFilter = 'all';
+
+  if (resultCache[name]) {
+    allItems = resultCache[name];
+    await loadChecked();
+    document.getElementById('resultsCard').style.display = 'block';
+    document.getElementById('progressLog').innerHTML = '';
+    buildFilterBtns();
+    renderTable(allItems);
+  } else {
+    allItems = [];
+    document.getElementById('resultsCard').style.display = 'none';
+  }
+}
+
 const MODEL_NAMES = [
   'ゲームボーイ（DMG）',
   'ゲームボーイカラー', 'ゲームボーイポケット', 'ゲームボーイアドバンス',
@@ -92,13 +164,12 @@ const MODEL_NAMES = [
 ];
 
 function getAuctionId(link) {
-  var m = link.match(/\/auction\/([a-z0-9]+)/i);
-  return m ? m[1] : link;
+  return source().idOf(link);
 }
 
 async function loadChecked() {
   try {
-    var res = await fetch('/api/checked');
+    var res = await fetch('/api/checked?source=' + currentSource);
     var data = await res.json();
     checkedIds = new Set(data.checked || []);
   } catch (e) {
@@ -110,7 +181,7 @@ async function saveCheck(auctionId) {
   await fetch('/api/checked', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ auctionId: auctionId }),
+    body: JSON.stringify({ auctionId: auctionId, source: currentSource }),
   });
 }
 
@@ -118,7 +189,7 @@ async function removeCheck(auctionId) {
   await fetch('/api/checked', {
     method: 'DELETE',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ auctionId: auctionId }),
+    body: JSON.stringify({ auctionId: auctionId, source: currentSource }),
   });
 }
 
@@ -126,7 +197,7 @@ async function clearChecked() {
   await fetch('/api/checked', {
     method: 'DELETE',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({}),
+    body: JSON.stringify({ source: currentSource }),
   });
   checkedIds.clear();
   renderTable(allItems);
@@ -169,7 +240,7 @@ function getTaxBadge(isStore) {
 function calcTotal(price, postage) {
   var p = parseInt(price);
   if (isNaN(p)) return '-';
-  if (postage.includes('無料')) return '¥' + p.toLocaleString();
+  if (postage.includes('無料') || postage.includes('込')) return '¥' + p.toLocaleString();
   var m = postage.match(/(\d[\d,]+)円/);
   if (m) return '¥' + (p + parseInt(m[1].replace(',', ''))).toLocaleString();
   return '-';
@@ -208,7 +279,7 @@ function renderTable(items) {
       '<td><button class="check-btn ' + (checked ? 'on' : '') + '" onclick="doCheck(\'' + encodedId + '\',' + i + ')">' + (checked ? '✓' : '') + '</button></td>' +
       '<td>' + item.model + '</td>' +
       '<td><a href="' + item.link + '" target="_blank">' + item.title + '</a></td>' +
-      '<td>' + getBadge(item.status) + '</td>' +
+      '<td>' + getBadge(item.status) + (item.condition ? '<div class="cond">' + item.condition + '</div>' : '') + '</td>' +
       '<td>¥' + Number(item.price).toLocaleString() + getTaxBadge(item.isStore) + '</td>' +
       '<td>' + item.postage + '</td>' +
       '<td>' + calcTotal(item.price, item.postage) + '</td>' +
@@ -217,7 +288,7 @@ function renderTable(items) {
   }
 
   document.getElementById('resultsBody').innerHTML =
-    '<table><thead><tr><th></th><th>機種</th><th>商品名</th><th>状態</th><th>現在価格</th><th>送料</th><th>合計</th><th>残り時間</th></tr></thead><tbody>' + rows + '</tbody></table>';
+    '<table><thead><tr><th></th><th>機種</th><th>商品名</th><th>状態</th><th>' + (currentSource === 'mercari' ? '価格' : '現在価格') + '</th><th>送料</th><th>合計</th><th>' + source().timeHeader + '</th></tr></thead><tbody>' + rows + '</tbody></table>';
 }
 
 async function doCheck(auctionId, i) {
@@ -245,29 +316,21 @@ function setFilter(filter, btn) {
   btn.classList.add('active');
   renderTable(allItems);
 }
-async function loadChecked() {
-  try {
-    var res = await fetch('/api/checked');
-    var data = await res.json();
-    checkedIds = new Set(data.checked || []);
-  } catch (e) {
-    checkedIds = new Set();
-  }
-}
 async function startSearch() {
   var btn = document.getElementById('searchBtn');
   btn.disabled = true;
-  btn.textContent = '⏳ 検索中...';
+  btn.textContent = '⏳ ' + source().label + 'を検索中...';
   document.getElementById('resultsCard').style.display = 'block';
-  document.getElementById('progressLog').innerHTML = '<div class="progress">ヤフオクから新着を取得中...</div>';
+  document.getElementById('progressLog').innerHTML = '<div class="progress">' + source().loading + '</div>';
   document.getElementById('resultsBody').innerHTML = '';
 
   await loadChecked();
 
   try {
-    var res = await fetch('/api/search');
+    var res = await fetch(source().endpoint);
     var data = await res.json();
     allItems = (data.items || []).sort(function(a, b) { return toMinutes(a.endTime) - toMinutes(b.endTime); });
+    resultCache[currentSource] = allItems;
     document.getElementById('progressLog').innerHTML = '';
     currentFilter = 'all';
     buildFilterBtns();
@@ -277,7 +340,7 @@ async function startSearch() {
   }
 
   btn.disabled = false;
-  btn.textContent = '🔍 新着を検索する';
+  btn.textContent = '🔍 ' + source().label + 'の新着を検索する';
 }
 </script>
 </body>

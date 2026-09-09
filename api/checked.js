@@ -14,6 +14,13 @@ async function redisCommand(...args) {
   return data.result;
 }
 
+// チェック済みの保存先キー。ヤフオクは従来どおり 'checked'、
+// メルカリは 'mercari:' 接頭辞を付けた別キーに分けて保持する。
+function keyFor(req) {
+  const source = (req.query && req.query.source) || (req.body && req.body.source);
+  return source === 'mercari' ? 'mercari:checked' : 'checked';
+}
+
 module.exports = async (req, res) => {
   res.setHeader('Access-Control-Allow-Origin', '*');
   res.setHeader('Access-Control-Allow-Methods', 'GET, POST, DELETE, OPTIONS');
@@ -22,23 +29,23 @@ module.exports = async (req, res) => {
   if (req.method === 'OPTIONS') return res.status(200).end();
 
   if (req.method === 'GET') {
-    const members = await redisCommand('SMEMBERS', 'checked');
+    const members = await redisCommand('SMEMBERS', keyFor(req));
     return res.status(200).json({ checked: members || [] });
   }
 
   if (req.method === 'POST') {
     const { auctionId } = req.body;
     if (!auctionId) return res.status(400).json({ error: 'auctionId required' });
-    await redisCommand('SADD', 'checked', auctionId);
+    await redisCommand('SADD', keyFor(req), auctionId);
     return res.status(200).json({ ok: true });
   }
 
   if (req.method === 'DELETE') {
     const { auctionId } = req.body;
     if (auctionId) {
-      await redisCommand('SREM', 'checked', auctionId);
+      await redisCommand('SREM', keyFor(req), auctionId);
     } else {
-      await redisCommand('DEL', 'checked');
+      await redisCommand('DEL', keyFor(req));
     }
     return res.status(200).json({ ok: true });
   }
