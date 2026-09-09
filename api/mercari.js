@@ -53,6 +53,8 @@ const MODELS = [
     // ジャンクの上限を書いていないのは意図的で、ジャンク判定（「現状品」「傷あり」表記を含む）は
     // 価格に関わらず「対象外」として除外される。
     priceLimits: { '中古': 6199 },
+    // 下限価格（メルカリのみ。ヤフオク側には無い設定）。3000円未満は対象外
+    priceMin: 3000,
     excludeJunk: true,
     // 状態は「やや傷や汚れあり」まで
     searchTypes: [{ status: '中古', istatus: '3,4,5' }],
@@ -244,7 +246,7 @@ function createDpopToken(url, method) {
   return signingInput + '.' + base64url(signature);
 }
 
-async function searchMercari(keyword, excludeKeyword, conditions, categories) {
+async function searchMercari(keyword, excludeKeyword, conditions, categories, priceMin) {
   const body = {
     userId: '',
     pageSize: 120,
@@ -262,7 +264,7 @@ async function searchMercari(keyword, excludeKeyword, conditions, categories) {
       categoryId: categories || [],
       brandId: [],
       sellerId: [],
-      priceMin: 0,
+      priceMin: priceMin || 0,
       priceMax: 0,
       itemConditionId: conditions,
       // 2 = 送料込み（出品者負担）。これに限定することで表示価格＝総額が確定する
@@ -358,10 +360,10 @@ module.exports = async (req, res) => {
       const model = targets[0];
       const { keyword, excludeKeyword } = splitQuery(model);
       const conditions = conditionsFor(model);
-      const data = await searchMercari(keyword, excludeKeyword, conditions, model.categories);
+      const data = await searchMercari(keyword, excludeKeyword, conditions, model.categories, model.priceMin);
       return res.status(200).json({
         model: model.name,
-        request: { keyword, excludeKeyword, itemConditionId: conditions, shippingPayerId: [2], categoryId: model.categories || [] },
+        request: { keyword, excludeKeyword, itemConditionId: conditions, shippingPayerId: [2], categoryId: model.categories || [], priceMin: model.priceMin || 0 },
         response: data,
       });
     }
@@ -372,7 +374,7 @@ module.exports = async (req, res) => {
     for (const model of targets) {
       try {
         const { keyword, excludeKeyword } = splitQuery(model);
-        const data = await searchMercari(keyword, excludeKeyword, conditionsFor(model), model.categories);
+        const data = await searchMercari(keyword, excludeKeyword, conditionsFor(model), model.categories, model.priceMin);
 
         for (const item of (data.items || [])) {
           const link = itemUrl(item);
@@ -399,6 +401,8 @@ module.exports = async (req, res) => {
           // shippingPayerId=2（送料込み）に限定して検索しているため、表示価格がそのまま総額
           const price = Number(item.price) || 0;
           const finalPrice = price;
+
+          if (model.priceMin && finalPrice < model.priceMin) continue; // 下限未満
 
           if (model.priceLimits) {
             const limit = model.priceLimits[status];
