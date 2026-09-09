@@ -6,7 +6,8 @@ const MODELS = [
     name: 'ゲームボーイ（DMG）',
     query: 'ゲームボーイ DMG 本体 -ジャンク -動作未確認',
     excludeWords: ['カラー', 'ポケット', 'アドバンス', 'GBC', 'GBA', 'ソフト', 'カセット', 'ロム', 'ROM', 'ゲームソフト'],
-    priceLimits: null,
+    // 総額（落札価格＋送料）で6000円まで
+    priceLimits: { '中古': 6000 },
     excludeJunk: true,
     // 状態は「やや傷や汚れあり」まで（6:傷や汚れあり / 7:全体的に状態が悪い は除外）
     searchTypes: [{ status: '中古', istatus: '3,4,5' }],
@@ -15,7 +16,8 @@ const MODELS = [
     name: 'ゲームボーイカラー',
     query: 'ゲームボーイカラー 本体 -ジャンク -動作未確認',
     excludeWords: [],
-    priceLimits: null,
+    // 総額（落札価格＋送料）で3800円まで
+    priceLimits: { '中古': 3800 },
     excludeJunk: true,
     // 状態は「やや傷や汚れあり」まで（6:傷や汚れあり / 7:全体的に状態が悪い は除外）
     searchTypes: [{ status: '中古', istatus: '3,4,5' }],
@@ -51,7 +53,8 @@ const MODELS = [
     name: 'DS',
     query: 'ニンテンドーDS 本体 -ジャンク -動作未確認',
     excludeWords: ['Lite', 'DSi', 'LL'],
-    priceLimits: null,
+    // 総額（落札価格＋送料）で3800円まで
+    priceLimits: { '中古': 3800 },
     excludeJunk: true,
     // 状態は「やや傷や汚れあり」まで（6:傷や汚れあり / 7:全体的に状態が悪い は除外）
     searchTypes: [{ status: '中古', istatus: '3,4,5' }],
@@ -60,7 +63,8 @@ const MODELS = [
     name: 'DS Lite',
     query: 'DS Lite 本体 -ジャンク -動作未確認',
     excludeWords: [],
-    priceLimits: null,
+    // 総額（落札価格＋送料）で4500円まで
+    priceLimits: { '中古': 4500 },
     excludeJunk: true,
     // 状態は「やや傷や汚れあり」まで（6:傷や汚れあり / 7:全体的に状態が悪い は除外）
     searchTypes: [{ status: '中古', istatus: '3,4,5' }],
@@ -69,7 +73,8 @@ const MODELS = [
     name: 'DSi',
     query: 'DSi 本体 -ジャンク -動作未確認',
     excludeWords: ['LL'],
-    priceLimits: null,
+    // 総額（落札価格＋送料）で3600円まで
+    priceLimits: { '中古': 3600 },
     excludeJunk: true,
     // 状態は「やや傷や汚れあり」まで（6:傷や汚れあり / 7:全体的に状態が悪い は除外）
     searchTypes: [{ status: '中古', istatus: '3,4,5' }],
@@ -108,7 +113,8 @@ const MODELS = [
     name: 'PSP 1000',
     query: 'PSP-1000 本体 -ジャンク -動作未確認',
     excludeWords: [],
-    priceLimits: null,
+    // 総額（落札価格＋送料）で6000円まで
+    priceLimits: { '中古': 6000 },
     excludeJunk: true,
     // 状態は「やや傷や汚れあり」まで（6:傷や汚れあり / 7:全体的に状態が悪い は除外）
     searchTypes: [{ status: '中古', istatus: '3,4,5' }],
@@ -117,7 +123,8 @@ const MODELS = [
     name: 'PSP 2000',
     query: 'PSP-2000 本体 -ジャンク -動作未確認',
     excludeWords: [],
-    priceLimits: null,
+    // 総額（落札価格＋送料）で8000円まで
+    priceLimits: { '中古': 8000 },
     excludeJunk: true,
     // 状態は「やや傷や汚れあり」まで（6:傷や汚れあり / 7:全体的に状態が悪い は除外）
     searchTypes: [{ status: '中古', istatus: '3,4,5' }],
@@ -126,7 +133,8 @@ const MODELS = [
     name: 'PSP 3000',
     query: 'PSP-3000 本体 -ジャンク -動作未確認',
     excludeWords: [],
-    priceLimits: null,
+    // 総額（落札価格＋送料）で9000円まで
+    priceLimits: { '中古': 9000 },
     excludeJunk: true,
     // 状態は「やや傷や汚れあり」まで（6:傷や汚れあり / 7:全体的に状態が悪い は除外）
     searchTypes: [{ status: '中古', istatus: '3,4,5' }],

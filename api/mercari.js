@@ -31,7 +31,9 @@ const MODELS = [
     categories: [7181], // 本体(ゲームボーイ)
     query: 'ゲームボーイ DMG 本体 -ジャンク -動作未確認',
     excludeWords: ['カラー', 'ポケット', 'アドバンス', 'GBC', 'GBA', 'ソフト', 'カセット', 'ロム', 'ROM', 'ゲームソフト'],
-    priceLimits: null,
+    // 総額（送料込み）で 5000〜6000円
+    priceLimits: { '中古': 6000 },
+    priceMins: { '中古': 5000 },
     excludeJunk: true,
     // 状態は「やや傷や汚れあり」まで（メルカリの itemConditionId 2〜4）
     searchTypes: [{ status: '中古', istatus: '3,4,5' }],
@@ -41,7 +43,9 @@ const MODELS = [
     categories: [8908], // 本体(カラー)
     query: 'ゲームボーイカラー 本体 -ジャンク -動作未確認',
     excludeWords: [],
-    priceLimits: null,
+    // 総額（送料込み）で 2800〜3800円
+    priceLimits: { '中古': 3800 },
+    priceMins: { '中古': 2800 },
     excludeJunk: true,
     // 状態は「やや傷や汚れあり」まで
     searchTypes: [{ status: '中古', istatus: '3,4,5' }],
@@ -83,7 +87,9 @@ const MODELS = [
     categories: [7050], // 本体(DS)
     query: 'ニンテンドーDS 本体 -ジャンク -動作未確認',
     excludeWords: ['Lite', 'DSi', 'LL'],
-    priceLimits: null,
+    // 総額（送料込み）で 2800〜3800円
+    priceLimits: { '中古': 3800 },
+    priceMins: { '中古': 2800 },
     excludeJunk: true,
     // 状態は「やや傷や汚れあり」まで（メルカリの itemConditionId 2〜4）
     searchTypes: [{ status: '中古', istatus: '3,4,5' }],
@@ -93,7 +99,9 @@ const MODELS = [
     categories: [8899], // 本体(DS Lite)
     query: 'DS Lite 本体 -ジャンク -動作未確認',
     excludeWords: [],
-    priceLimits: null,
+    // 総額（送料込み）で 3300〜4500円
+    priceLimits: { '中古': 4500 },
+    priceMins: { '中古': 3300 },
     excludeJunk: true,
     // 状態は「やや傷や汚れあり」まで（メルカリの itemConditionId 2〜4）
     searchTypes: [{ status: '中古', istatus: '3,4,5' }],
@@ -103,7 +111,9 @@ const MODELS = [
     categories: [8898], // 本体(DS i) ※DSi/DSi LL 共通
     query: 'DSi 本体 -ジャンク -動作未確認',
     excludeWords: ['LL'],
-    priceLimits: null,
+    // 総額（送料込み）で 3000〜3600円
+    priceLimits: { '中古': 3600 },
+    priceMins: { '中古': 3000 },
     excludeJunk: true,
     // 状態は「やや傷や汚れあり」まで（メルカリの itemConditionId 2〜4）
     searchTypes: [{ status: '中古', istatus: '3,4,5' }],
@@ -148,7 +158,9 @@ const MODELS = [
     categories: [7076], // 本体(PSP)
     query: 'PSP-1000 本体 -ジャンク -動作未確認',
     excludeWords: [],
-    priceLimits: null,
+    // 総額（送料込み）で 4500〜6000円
+    priceLimits: { '中古': 6000 },
+    priceMins: { '中古': 4500 },
     excludeJunk: true,
     // 状態は「やや傷や汚れあり」まで（メルカリの itemConditionId 2〜4）
     searchTypes: [{ status: '中古', istatus: '3,4,5' }],
@@ -158,7 +170,9 @@ const MODELS = [
     categories: [7076], // 本体(PSP)
     query: 'PSP-2000 本体 -ジャンク -動作未確認',
     excludeWords: [],
-    priceLimits: null,
+    // 総額（送料込み）で 6500〜8000円
+    priceLimits: { '中古': 8000 },
+    priceMins: { '中古': 6500 },
     excludeJunk: true,
     // 状態は「やや傷や汚れあり」まで（メルカリの itemConditionId 2〜4）
     searchTypes: [{ status: '中古', istatus: '3,4,5' }],
@@ -168,7 +182,9 @@ const MODELS = [
     categories: [7076], // 本体(PSP)
     query: 'PSP-3000 本体 -ジャンク -動作未確認',
     excludeWords: [],
-    priceLimits: null,
+    // 総額（送料込み）で 7500〜9000円
+    priceLimits: { '中古': 9000 },
+    priceMins: { '中古': 7500 },
     excludeJunk: true,
     // 状態は「やや傷や汚れあり」まで（メルカリの itemConditionId 2〜4）
     searchTypes: [{ status: '中古', istatus: '3,4,5' }],
