@@ -54,7 +54,7 @@ const MODELS = [
     // 価格に関わらず「対象外」として除外される。
     priceLimits: { '中古': 6199 },
     // 下限価格（メルカリのみ。ヤフオク側には無い設定）。4000円未満は対象外
-    priceMin: 4000,
+    priceMins: { '中古': 4000 },
     excludeJunk: true,
     // 状態は「やや傷や汚れあり」まで
     searchTypes: [{ status: '中古', istatus: '3,4,5' }],
@@ -65,7 +65,9 @@ const MODELS = [
     categories: [7174], // 本体(アドバンス)
     query: 'ゲームボーイアドバンス 本体',
     excludeWords: ['SP'],
-    priceLimits: { '中古': 7100, 'ジャンク': 6100 },
+    // 総額（送料込み）で 中古 5500〜7200円 / ジャンク 5000〜6200円
+    priceLimits: { '中古': 7200, 'ジャンク': 6200 },
+    priceMins: { '中古': 5500, 'ジャンク': 5000 },
   },
   {
     name: 'ゲームボーイアドバンスSP',
@@ -196,6 +198,14 @@ function conditionsFor(model) {
     }
   }
   return Array.from(set).sort();
+}
+
+// 検索リクエストに載せる下限価格。状態別に下限が違う場合は、いちばん低い方に合わせる
+// （リクエスト側で絞りすぎないようにし、状態ごとの厳密な判定は取得後に行う）
+function priceMinFor(model) {
+  if (!model.priceMins) return 0;
+  const mins = Object.values(model.priceMins);
+  return mins.length ? Math.min(...mins) : 0;
 }
 
 // ヤフオク用クエリの「-ワード」（マイナス検索）を、メルカリの excludeKeyword 側へ振り分ける
@@ -360,10 +370,10 @@ module.exports = async (req, res) => {
       const model = targets[0];
       const { keyword, excludeKeyword } = splitQuery(model);
       const conditions = conditionsFor(model);
-      const data = await searchMercari(keyword, excludeKeyword, conditions, model.categories, model.priceMin);
+      const data = await searchMercari(keyword, excludeKeyword, conditions, model.categories, priceMinFor(model));
       return res.status(200).json({
         model: model.name,
-        request: { keyword, excludeKeyword, itemConditionId: conditions, shippingPayerId: [2], categoryId: model.categories || [], priceMin: model.priceMin || 0 },
+        request: { keyword, excludeKeyword, itemConditionId: conditions, shippingPayerId: [2], categoryId: model.categories || [], priceMin: priceMinFor(model) },
         response: data,
       });
     }
@@ -374,7 +384,7 @@ module.exports = async (req, res) => {
     for (const model of targets) {
       try {
         const { keyword, excludeKeyword } = splitQuery(model);
-        const data = await searchMercari(keyword, excludeKeyword, conditionsFor(model), model.categories, model.priceMin);
+        const data = await searchMercari(keyword, excludeKeyword, conditionsFor(model), model.categories, priceMinFor(model));
 
         for (const item of (data.items || [])) {
           const link = itemUrl(item);
@@ -402,12 +412,16 @@ module.exports = async (req, res) => {
           const price = Number(item.price) || 0;
           const finalPrice = price;
 
-          if (model.priceMin && finalPrice < model.priceMin) continue; // 下限未満
-
           if (model.priceLimits) {
             const limit = model.priceLimits[status];
             if (limit === undefined) continue; // この状態は対象外
             if (finalPrice > limit) continue;  // 上限超過
+          }
+
+          // 下限価格チェック（その状態の下限が未設定なら下限なし）
+          if (model.priceMins) {
+            const min = model.priceMins[status];
+            if (min !== undefined && finalPrice < min) continue; // 下限未満
           }
 
           const conditionId = Number(item.itemConditionId) || null;

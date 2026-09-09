@@ -35,7 +35,9 @@ const MODELS = [
     name: 'ゲームボーイアドバンス',
     query: 'ゲームボーイアドバンス 本体',
     excludeWords: ['SP'],
-    priceLimits: { '中古': 7100, 'ジャンク': 6100 },
+    // 総額（落札価格＋送料）で 中古 5500〜7200円 / ジャンク 5000〜6200円
+    priceLimits: { '中古': 7200, 'ジャンク': 6200 },
+    priceMins: { '中古': 5500, 'ジャンク': 5000 },
   },
   {
     name: 'ゲームボーイアドバンスSP',
@@ -273,6 +275,12 @@ module.exports = async (req, res) => {
               const limit = model.priceLimits[status];
               if (limit === undefined) continue; // この状態は対象外
               if (finalPrice > limit) continue; // 上限超過
+            }
+
+            // 下限価格チェック（その状態の下限が未設定なら下限なし）
+            if (model.priceMins) {
+              const min = model.priceMins[status];
+              if (min !== undefined && finalPrice < min) continue; // 下限未満
             }
 
             results.push({
