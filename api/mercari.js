@@ -249,6 +249,15 @@ function priceMinFor(model) {
   return mins.length ? Math.min(...mins) : 0;
 }
 
+// 検索リクエストに載せる上限価格。状態別に上限が違う場合は、いちばん高い方に合わせる
+// （状態ごとの厳密な判定は取得後に行う）。1回の取得は120件までなので、窓が狭いモデルほど
+// ここで絞っておかないと「新着120件の中に窓内の出品が入りきらず取りこぼす」ことになる
+function priceMaxFor(model) {
+  if (!model.priceLimits) return 0;
+  const limits = Object.values(model.priceLimits);
+  return limits.length ? Math.max(...limits) : 0;
+}
+
 // ヤフオク用クエリの「-ワード」（マイナス検索）を、メルカリの excludeKeyword 側へ振り分ける
 function splitQuery(model) {
   const keywords = [];
@@ -297,7 +306,7 @@ function createDpopToken(url, method) {
   return signingInput + '.' + base64url(signature);
 }
 
-async function searchMercari(keyword, excludeKeyword, conditions, categories, priceMin) {
+async function searchMercari(keyword, excludeKeyword, conditions, categories, priceMin, priceMax) {
   const body = {
     userId: '',
     pageSize: 120,
@@ -316,7 +325,7 @@ async function searchMercari(keyword, excludeKeyword, conditions, categories, pr
       brandId: [],
       sellerId: [],
       priceMin: priceMin || 0,
-      priceMax: 0,
+      priceMax: priceMax || 0,
       itemConditionId: conditions,
       // 2 = 送料込み（出品者負担）。これに限定することで表示価格＝総額が確定する
       shippingPayerId: [2],
@@ -411,10 +420,10 @@ module.exports = async (req, res) => {
       const model = targets[0];
       const { keyword, excludeKeyword } = splitQuery(model);
       const conditions = conditionsFor(model);
-      const data = await searchMercari(keyword, excludeKeyword, conditions, model.categories, priceMinFor(model));
+      const data = await searchMercari(keyword, excludeKeyword, conditions, model.categories, priceMinFor(model), priceMaxFor(model));
       return res.status(200).json({
         model: model.name,
-        request: { keyword, excludeKeyword, itemConditionId: conditions, shippingPayerId: [2], categoryId: model.categories || [], priceMin: priceMinFor(model) },
+        request: { keyword, excludeKeyword, itemConditionId: conditions, shippingPayerId: [2], categoryId: model.categories || [], priceMin: priceMinFor(model), priceMax: priceMaxFor(model) },
         response: data,
       });
     }
@@ -425,7 +434,7 @@ module.exports = async (req, res) => {
     for (const model of targets) {
       try {
         const { keyword, excludeKeyword } = splitQuery(model);
-        const data = await searchMercari(keyword, excludeKeyword, conditionsFor(model), model.categories, priceMinFor(model));
+        const data = await searchMercari(keyword, excludeKeyword, conditionsFor(model), model.categories, priceMinFor(model), priceMaxFor(model));
 
         for (const item of (data.items || [])) {
           const link = itemUrl(item);
