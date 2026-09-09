@@ -113,8 +113,9 @@ var SOURCES = {
   mercari: {
     label: 'メルカリ',
     endpoint: '/api/mercari',
-    // メルカリは売れ残りが毎回出てくるので、チェック済みは既定で非表示にする
-    hideCheckedDefault: true,
+    // チェック済みはヤフオクと同じくグレイアウト表示のまま残す。
+    // 売れ残りを消したいときは「チェック済みを隠す」で切り替えられる
+    hideCheckedDefault: false,
     headerNote: 'メルカリ新着ゲーム機モニタリングツール',
     configNote: '※メルカリは「送料込み」の出品のみ、各機種の「本体」カテゴリに限定して抽出します。',
     resultNote: '※送料込みの出品のみを対象にしているため、表示価格がそのまま総額です。',
