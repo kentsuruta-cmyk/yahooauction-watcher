@@ -99,6 +99,7 @@ var SOURCES = {
   yahoo: {
     label: 'ヤフオク',
     endpoint: '/api/search',
+    hideCheckedDefault: false,
     headerNote: 'ヤフオク新着ゲーム機モニタリングツール',
     configNote: '',
     resultNote: '※価格はヤフオク表示価格です。',
@@ -112,6 +113,8 @@ var SOURCES = {
   mercari: {
     label: 'メルカリ',
     endpoint: '/api/mercari',
+    // メルカリは売れ残りが毎回出てくるので、チェック済みは既定で非表示にする
+    hideCheckedDefault: true,
     headerNote: 'メルカリ新着ゲーム機モニタリングツール',
     configNote: '※メルカリは「送料込み」の出品のみ、各機種の「本体」カテゴリに限定して抽出します。',
     resultNote: '※送料込みの出品のみを対象にしているため、表示価格がそのまま総額です。',
@@ -122,6 +125,12 @@ var SOURCES = {
       return m ? m[1] : link;
     },
   },
+};
+
+// 「チェック済みを隠す」の状態はタブごとに保持する（初期値は SOURCES の hideCheckedDefault）
+var hideCheckedBySource = {
+  yahoo: SOURCES.yahoo.hideCheckedDefault,
+  mercari: SOURCES.mercari.hideCheckedDefault,
 };
 
 var currentSource = 'yahoo';
@@ -142,6 +151,8 @@ async function switchTab(name) {
   document.getElementById('searchBtn').textContent = '🔍 ' + source().label + 'の新着を検索する';
 
   currentFilter = 'all';
+  hideChecked = hideCheckedBySource[name];
+  updateHideBtn();
 
   if (resultCache[name]) {
     allItems = resultCache[name];
@@ -203,16 +214,16 @@ async function clearChecked() {
   renderTable(allItems);
 }
 
+function updateHideBtn() {
+  var btn = document.getElementById('hideCheckedBtn');
+  btn.classList.toggle('active', hideChecked);
+  btn.textContent = hideChecked ? 'チェック済みを表示' : 'チェック済みを隠す';
+}
+
 function toggleHideChecked() {
   hideChecked = !hideChecked;
-  var btn = document.getElementById('hideCheckedBtn');
-  if (hideChecked) {
-    btn.classList.add('active');
-    btn.textContent = 'チェック済みを表示';
-  } else {
-    btn.classList.remove('active');
-    btn.textContent = 'チェック済みを隠す';
-  }
+  hideCheckedBySource[currentSource] = hideChecked;
+  updateHideBtn();
   renderTable(allItems);
 }
 
@@ -325,6 +336,8 @@ async function startSearch() {
   document.getElementById('resultsBody').innerHTML = '';
 
   await loadChecked();
+  hideChecked = hideCheckedBySource[currentSource];
+  updateHideBtn();
 
   try {
     var res = await fetch(source().endpoint);
