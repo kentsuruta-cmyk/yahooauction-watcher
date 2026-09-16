@@ -29,7 +29,7 @@ const MODELS = [
   {
     name: 'ゲームボーイ（DMG）',
     categories: [7181], // 本体(ゲームボーイ)
-    query: 'ゲームボーイ DMG 本体 -ジャンク -動作未確認',
+    query: 'ゲームボーイ DMG 本体 -ジャンク -動作未確認 -通電未確認',
     excludeWords: ['カラー', 'ポケット', 'アドバンス', 'GBC', 'GBA', 'ソフト', 'カセット', 'ロム', 'ROM', 'ゲームソフト'],
     // 総額（送料込み）で 5000〜6000円
     priceLimits: { '中古': 6000 },
@@ -41,7 +41,7 @@ const MODELS = [
   {
     name: 'ゲームボーイカラー',
     categories: [8908], // 本体(カラー)
-    query: 'ゲームボーイカラー 本体 -ジャンク -動作未確認',
+    query: 'ゲームボーイカラー 本体 -ジャンク -動作未確認 -通電未確認',
     excludeWords: [],
     // 総額（送料込み）で 2800〜3800円
     priceLimits: { '中古': 3800 },
@@ -53,7 +53,7 @@ const MODELS = [
   {
     name: 'ゲームボーイポケット',
     categories: [8907], // 本体(ポケット)
-    query: 'ゲームボーイポケット 本体 -ジャンク -動作未確認',
+    query: 'ゲームボーイポケット 本体 -ジャンク -動作未確認 -通電未確認',
     excludeWords: [],
     // 中古のみ・総額6200円以上は対象外。
     // ジャンクの上限を書いていないのは意図的で、ジャンク判定（「現状品」「傷あり」表記を含む）は
@@ -87,7 +87,7 @@ const MODELS = [
   {
     name: 'DS',
     categories: [7050], // 本体(DS)
-    query: 'ニンテンドーDS 本体 -ジャンク -動作未確認',
+    query: 'ニンテンドーDS 本体 -ジャンク -動作未確認 -通電未確認',
     excludeWords: ['Lite', 'DSi', 'LL'],
     // 総額（送料込み）で 2800〜3800円
     priceLimits: { '中古': 3800 },
@@ -99,7 +99,7 @@ const MODELS = [
   {
     name: 'DS Lite',
     categories: [8899], // 本体(DS Lite)
-    query: 'DS Lite 本体 -ジャンク -動作未確認',
+    query: 'DS Lite 本体 -ジャンク -動作未確認 -通電未確認',
     excludeWords: [],
     // 総額（送料込み）で 3600〜4500円
     priceLimits: { '中古': 4500 },
@@ -111,7 +111,7 @@ const MODELS = [
   {
     name: 'DSi',
     categories: [8898], // 本体(DS i) ※DSi/DSi LL 共通
-    query: 'DSi 本体 -ジャンク -動作未確認',
+    query: 'DSi 本体 -ジャンク -動作未確認 -通電未確認',
     excludeWords: ['LL'],
     // 総額（送料込み）で 3000〜3600円
     priceLimits: { '中古': 3600 },
@@ -123,7 +123,7 @@ const MODELS = [
   {
     name: 'DSi LL',
     categories: [8898], // 本体(DS i) ※DSi/DSi LL 共通
-    query: 'DSi LL 本体 -ジャンク -動作未確認',
+    query: 'DSi LL 本体 -ジャンク -動作未確認 -通電未確認',
     excludeWords: [],
     // 総額（送料込み）で7700円まで
     priceLimits: { '中古': 7700 },
@@ -134,7 +134,7 @@ const MODELS = [
   {
     name: '3DS',
     categories: [7022, 8885], // 本体(3DS) / 本体(New 3DS)
-    query: '3DS 本体 -ジャンク -動作未確認',
+    query: '3DS 本体 -ジャンク -動作未確認 -通電未確認',
     excludeWords: ['LL'],
     // 総額（送料込み）で 9500〜11000円
     priceLimits: { '中古': 11000 },
@@ -146,7 +146,7 @@ const MODELS = [
   {
     name: '3DS LL',
     categories: [7038, 8882], // 本体(3DS LL) / 本体(New 3DS LL)
-    query: '3DS LL 本体 -ジャンク -動作未確認',
+    query: '3DS LL 本体 -ジャンク -動作未確認 -通電未確認',
     excludeWords: [],
     // 総額（送料込み）で 15000〜18000円
     priceLimits: { '中古': 18000 },
@@ -158,7 +158,7 @@ const MODELS = [
   {
     name: 'PSP 1000',
     categories: [7076], // 本体(PSP)
-    query: 'PSP-1000 本体 -ジャンク -動作未確認',
+    query: 'PSP-1000 本体 -ジャンク -動作未確認 -通電未確認',
     excludeWords: [],
     // 総額（送料込み）で 4500〜6000円
     priceLimits: { '中古': 6000 },
@@ -170,7 +170,7 @@ const MODELS = [
   {
     name: 'PSP 2000',
     categories: [7076], // 本体(PSP)
-    query: 'PSP-2000 本体 -ジャンク -動作未確認',
+    query: 'PSP-2000 本体 -ジャンク -動作未確認 -通電未確認',
     excludeWords: [],
     // 総額（送料込み）で 6500〜8000円
     priceLimits: { '中古': 8000 },
@@ -182,7 +182,7 @@ const MODELS = [
   {
     name: 'PSP 3000',
     categories: [7076], // 本体(PSP)
-    query: 'PSP-3000 本体 -ジャンク -動作未確認',
+    query: 'PSP-3000 本体 -ジャンク -動作未確認 -通電未確認',
     excludeWords: [],
     // 総額（送料込み）で 7500〜9000円
     priceLimits: { '中古': 9000 },
@@ -193,9 +193,9 @@ const MODELS = [
   },
 ];
 
-const JUNK_WORDS = ['ジャンク', '動作未確認', '不動品', '動作不良', '現状品', '傷あり'];
+const JUNK_WORDS = ['ジャンク', '動作未確認', '通電未確認', '不動品', '動作不良', '現状品', '傷あり'];
 const WORKING_WORDS = ['動作品', '動作確認済', '完動品'];
-const NG_WORDS = ['ジャンク', '動作未確認', '不動品', '動作不良'];
+const NG_WORDS = ['ジャンク', '動作未確認', '通電未確認', '不動品', '動作不良'];
 
 // メルカリ専用の除外ワード（全モデル共通）。
 // 出品者がカテゴリを間違えて「本体」カテゴリに空箱や説明書だけを出しているケースを弾く。
