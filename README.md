@@ -56,3 +56,5 @@ curl "https://yahooauction-watcher.vercel.app/api/watch-check?dry=1"
   最高入札額）が返る。商品単体は `items/get` に `include_auction=true` と
   `include_product_page_component=true` の**両方**が要る。
 - メルカリのオークションは終了間際の入札で終了予定時刻が延長される。「あと何分」は常に暫定値。
+- メルカリは出品から90日を超えたものを除外している（`MAX_LISTING_AGE_DAYS`）。売れ残りが結果の
+  3割ほどを占めていたため。

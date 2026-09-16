@@ -198,6 +198,9 @@ const JUNK_WORDS = ['ジャンク', '動作未確認', '通電未確認', '不�
 const WORKING_WORDS = ['動作品', '動作確認済', '完動品'];
 const NG_WORDS = ['ジャンク', '動作未確認', '通電未確認', '不動品', '動作不良'];
 
+// 出品からこの日数を超えたものは一覧に出さない（長く売れ残っている出品は見てもしかたがない）
+const MAX_LISTING_AGE_DAYS = 90;
+
 // メルカリ専用の除外ワード（全モデル共通）。
 // 出品者がカテゴリを間違えて「本体」カテゴリに空箱や説明書だけを出しているケースを弾く。
 const MERCARI_NG_WORDS = ['空箱', '箱のみ', '説明書のみ', '取説のみ', 'ケースのみ', '外箱のみ'];
@@ -411,6 +414,10 @@ module.exports = async (req, res) => {
 
           const title = item.name || '';
           if (!title) continue;
+
+          // 出品から90日以上たっているものは売れ残りとみなして除外する
+          const createdSec = Number(item.created) || 0;
+          if (createdSec && Date.now() / 1000 - createdSec > MAX_LISTING_AGE_DAYS * 86400) continue;
 
           const ngWords = (model.excludeJunk
             ? model.excludeWords.concat(NG_WORDS)
