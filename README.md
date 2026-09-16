@@ -38,6 +38,9 @@ DS / DS Lite / DSi / DSi LL / 3DS / 3DS LL / PSP 1000・2000・3000）を監視�
 ### 動作確認
 
 ```
+# 通知先の配線を確認する（テストメッセージが1通飛ぶ）
+curl "https://yahooauction-watcher.vercel.app/api/watch-check?test=1"
+
 # 通知を飛ばさずに判定結果だけ見る
 curl "https://yahooauction-watcher.vercel.app/api/watch-check?dry=1"
 ```

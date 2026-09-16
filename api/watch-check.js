@@ -38,11 +38,12 @@ async function notify(text) {
   if (WEBHOOK_URL.includes('ntfy.sh')) {
     init = { method: 'POST', headers: { 'Content-Type': 'text/plain; charset=utf-8' }, body: text };
   } else {
-    // Discord は content、Slack は text を読む。両方入れておけばどちらでも通る
+    // Discord は content、Slack は text を読む
+    const isSlack = WEBHOOK_URL.includes('hooks.slack.com');
     init = {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ content: text, text }),
+      body: JSON.stringify(isSlack ? { text } : { content: text }),
     };
   }
 
@@ -87,6 +88,14 @@ module.exports = async (req, res) => {
 
   // ?dry=1 … 通知を飛ばさずに判定結果だけ返す（動作確認用）
   const dryRun = query.dry === '1' || query.dry === 'true';
+
+  // ?test=1 … 通知先の配線確認。テストメッセージを1通だけ送って終わる
+  if (query.test === '1' || query.test === 'true') {
+    const result = await notify(
+      '✅ 通知テスト\nKENJAGAMES Auction Watcher の通知先はここで合っています。'
+    );
+    return res.status(200).json({ test: true, webhookConfigured: !!WEBHOOK_URL, result });
+  }
 
   try {
     const watch = await readAll();
