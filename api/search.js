@@ -244,6 +244,17 @@ async function searchYahooAuction(query, istatus) {
     const priceLabel = $(el).find('.Product__priceValue').first().parent().text();
     const isStore = priceLabel.includes('税込') || priceLabel.includes('消費税') || $(el).find('.Product__store').length > 0;
 
+    // オークションか定額（フリマ）出品かの判定。
+    // 定額出品には「現在」ラベルも入札数も残り時間も付かない（2026-09-16 に fixed=1 と fixed=2 の
+    // 検索結果を比べて確認）。オークションは必ず「現在」ラベルを持つ。
+    const labelTexts = $(el).find('.Product__label').map((_, l) => $(l).text().trim()).get();
+    const isAuction = labelTexts.includes('現在') || !!endTimeText;
+    const bidCount = parseInt(($(el).find('.Product__bid').first().text().match(/\d+/) || [])[0], 10);
+    // 「即決」ラベルがあるときだけ2つ目の価格が即決価格
+    const buyNowText = labelTexts.includes('即決')
+      ? $(el).find('.Product__priceValue').eq(1).text().trim()
+      : '';
+
     if (!title || !link) return;
 
     const endTime = parseEndTime(endTimeText);
@@ -259,6 +270,9 @@ async function searchYahooAuction(query, istatus) {
       postageText: postageText || '',
       isStore,
       taxLabel: priceLabel,
+      isAuction,
+      bidCount: Number.isNaN(bidCount) ? null : bidCount,
+      buyNowText,
     });
   });
 
@@ -328,6 +342,11 @@ module.exports = async (req, res) => {
               status,
               postage: item.postageText || '送料不明',
               isStore: item.isStore,
+              isAuction: item.isAuction,
+              bidCount: item.bidCount,
+              buyNowPrice: item.buyNowText
+                ? parseInt(item.buyNowText.replace(/[^0-9]/g, ''), 10) || null
+                : null,
               priceLimit: model.priceLimits ? model.priceLimits[status] : null,
             });
           }

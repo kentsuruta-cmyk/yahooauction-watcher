@@ -18,6 +18,7 @@
 // ─────────────────────────────────────────────────────────────────────────────
 
 const crypto = require('crypto');
+const { createDpopToken } = require('../lib/mercari-client');
 
 const MERCARI_ENDPOINT = 'https://api.mercari.jp/v2/entities:search';
 
@@ -271,43 +272,6 @@ function splitQuery(model) {
   return { keyword: keywords.join(' '), excludeKeyword: excludes.join(' ') };
 }
 
-function base64url(input) {
-  return Buffer.from(input)
-    .toString('base64')
-    .replace(/\+/g, '-')
-    .replace(/\//g, '_')
-    .replace(/=+$/, '');
-}
-
-// メルカリ内部APIは DPoP（RFC 9449）ヘッダーが必須。
-// 使い捨ての ES256(P-256) 鍵ペアをリクエストごとに生成し、公開鍵を jwk としてヘッダーに載せて自己署名する。
-function createDpopToken(url, method) {
-  const { publicKey, privateKey } = crypto.generateKeyPairSync('ec', { namedCurve: 'prime256v1' });
-  const jwk = publicKey.export({ format: 'jwk' });
-
-  const header = {
-    typ: 'dpop+jwt',
-    alg: 'ES256',
-    jwk: { crv: 'P-256', kty: 'EC', x: jwk.x, y: jwk.y },
-  };
-  const payload = {
-    iat: Math.floor(Date.now() / 1000),
-    jti: crypto.randomUUID(),
-    htu: url,
-    htm: method,
-    uuid: crypto.randomUUID(),
-  };
-
-  const signingInput = base64url(JSON.stringify(header)) + '.' + base64url(JSON.stringify(payload));
-  // ES256 は R||S の生署名（IEEE P1363）。DER のままだと 401 になる
-  const signature = crypto.sign('sha256', Buffer.from(signingInput), {
-    key: privateKey,
-    dsaEncoding: 'ieee-p1363',
-  });
-
-  return signingInput + '.' + base64url(signature);
-}
-
 async function searchMercari(keyword, excludeKeyword, conditions, categories, priceMin, priceMax) {
   const body = {
     userId: '',
@@ -354,6 +318,9 @@ async function searchMercari(keyword, excludeKeyword, conditions, categories, pr
     withParentProducts: false,
     withProductArticles: false,
     withSearchConditionId: false,
+    // これを付けると各商品に auction（bidDeadline/totalBid/highestBid/initialPrice）が入る。
+    // 付けないと auction は常に null になる（2026-09-16 実測）
+    withAuction: true,
   };
 
   const res = await fetch(MERCARI_ENDPOINT, {
@@ -478,6 +445,10 @@ module.exports = async (req, res) => {
 
           const conditionId = Number(item.itemConditionId) || null;
 
+          // オークション出品（withAuction: true のときだけ入る）。
+          // price はオークションでも「現在の最高入札額」なので、上限・下限の判定はそのまま使える。
+          const auc = item.auction && item.auction.bidDeadline ? item.auction : null;
+
           results.push({
             model: model.name,
             title,
@@ -486,6 +457,11 @@ module.exports = async (req, res) => {
             finalPrice,
             shippingNote: '送料込み',
             endTime: relativeTime(item.created),
+            isAuction: !!auc,
+            // 終了予定時刻（ISO・UTC）。終了間際の入札で延長されるため、あくまで「予定」
+            bidDeadline: auc ? auc.bidDeadline : null,
+            totalBid: auc ? Number(auc.totalBid) || 0 : null,
+            initialPrice: auc ? Number(auc.initialPrice) || null : null,
             created: Number(item.created) || null,
             status,
             condition: conditionId ? MERCARI_CONDITIONS[conditionId] : '',

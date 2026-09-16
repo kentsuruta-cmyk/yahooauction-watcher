@@ -35,7 +35,7 @@ tr:hover td { background: #fafafa; }
 tr.checked td { opacity: 0.4; }
 td a { color: #e0003c; text-decoration: none; }
 td a:hover { text-decoration: underline; }
-.badge { font-size: 10px; padding: 2px 8px; border-radius: 3px; font-weight: bold; display: inline-block; }
+.badge { font-size: 10px; padding: 2px 8px; border-radius: 3px; font-weight: bold; display: inline-block; white-space: nowrap; margin-bottom: 2px; }
 .badge-used { background: #00aa55; color: #fff; }
 .badge-junk { background: #e0003c; color: #fff; }
 .tax-badge { font-size: 9px; padding: 1px 5px; border-radius: 3px; display: inline-block; margin-left: 4px; }
@@ -51,6 +51,12 @@ td a:hover { text-decoration: underline; }
 .tab:hover { color: #e0003c; }
 .tab.active { color: #e0003c; border-bottom-color: #e0003c; font-weight: bold; }
 .cond { color: #999; font-size: 10px; margin-top: 3px; }
+.badge-auction { background: #0066cc; color: #fff; }
+.badge-fixed { background: #555; color: #fff; }
+.watch-btn { background: none; border: 1px solid #ccc; color: #888; padding: 4px 8px; border-radius: 4px; cursor: pointer; font-size: 10px; font-family: 'Courier New', monospace; white-space: nowrap; transition: all 0.2s; }
+.watch-btn:hover { border-color: #0066cc; color: #0066cc; }
+.watch-btn.on { background: #0066cc; border-color: #0066cc; color: #fff; }
+.watch-count { color: #0066cc; font-size: 11px; }
 </style>
 </head>
 <body>
@@ -79,6 +85,7 @@ td a:hover { text-decoration: underline; }
 <div class="filter-row">
 <div class="filter-btns" id="filterBtns"></div>
 <div class="action-btns">
+<span id="watchCount"></span>
 <button class="hide-btn" id="hideCheckedBtn" onclick="toggleHideChecked()">チェック済みを隠す</button>
 <button class="clear-btn" onclick="clearChecked()">チェックをリセット</button>
 </div>
@@ -93,6 +100,10 @@ let allItems = [];
 let currentFilter = 'all';
 let hideChecked = false;
 let checkedIds = new Set();
+// メルカリのオークション監視リスト（商品ID → { maxPrice, ... }）
+var watchMap = {};
+// いまテーブルに描画している行（監視ボタンから商品情報を引くために保持する）
+var renderedItems = [];
 
 // タブごとの違いはここに集約。テーブル描画などの処理は両タブで共通のものを使う。
 var SOURCES = {
@@ -158,6 +169,7 @@ async function switchTab(name) {
   if (resultCache[name]) {
     allItems = resultCache[name];
     await loadChecked();
+    await loadWatch();
     document.getElementById('resultsCard').style.display = 'block';
     document.getElementById('progressLog').innerHTML = '';
     buildFilterBtns();
@@ -186,6 +198,18 @@ async function loadChecked() {
     checkedIds = new Set(data.checked || []);
   } catch (e) {
     checkedIds = new Set();
+  }
+}
+
+// 監視リストはメルカリのオークションだけが対象
+async function loadWatch() {
+  if (currentSource !== 'mercari') { watchMap = {}; return; }
+  try {
+    var res = await fetch('/api/watch');
+    var data = await res.json();
+    watchMap = data.watch || {};
+  } catch (e) {
+    watchMap = {};
   }
 }
 
@@ -237,10 +261,42 @@ function toMinutes(s) {
   return 99999;
 }
 
+// オークションの残り時間（終了間際の入札で延長されるので、あくまで予定）
+function remainText(iso) {
+  var min = Math.round((new Date(iso).getTime() - Date.now()) / 60000);
+  if (min <= 0) return '終了間近';
+  if (min < 60) return 'あと' + min + '分';
+  var h = Math.floor(min / 60);
+  if (h < 24) return 'あと' + h + '時間' + (min % 60 ? (min % 60) + '分' : '');
+  return 'あと' + Math.floor(h / 24) + '日' + (h % 24 ? (h % 24) + '時間' : '');
+}
+
+function endText(iso) {
+  var d = new Date(iso);
+  return (d.getMonth() + 1) + '/' + d.getDate() + ' ' +
+    ('0' + d.getHours()).slice(-2) + ':' + ('0' + d.getMinutes()).slice(-2);
+}
+
 function getBadge(status) {
   if (status === '中古') return '<span class="badge badge-used">中古</span>';
   if (status === 'ジャンク') return '<span class="badge badge-junk">ジャンク</span>';
   return '';
+}
+
+// オークションか定額かを一目で分かるようにする（ヤフオク・メルカリ共通）
+function getTypeBadge(item) {
+  return item.isAuction
+    ? '<span class="badge badge-auction">オークション</span>'
+    : '<span class="badge badge-fixed">定額</span>';
+}
+
+// 入札数と即決価格。取れていない項目は出さない
+function bidNote(item) {
+  var parts = [];
+  var bids = item.totalBid != null ? item.totalBid : item.bidCount;
+  if (bids != null) parts.push('入札 ' + bids + '件');
+  if (item.buyNowPrice) parts.push('即決 ¥' + Number(item.buyNowPrice).toLocaleString());
+  return parts.length ? '<div class="cond">' + parts.join(' / ') + '</div>' : '';
 }
 
 function getTaxBadge(isStore) {
@@ -281,26 +337,100 @@ function renderTable(items) {
     return;
   }
 
+  var isMercari = currentSource === 'mercari';
+  renderedItems = filtered;
+
   var rows = '';
   for (var i = 0; i < filtered.length; i++) {
     var item = filtered[i];
     var auctionId = getAuctionId(item.link);
     var checked = checkedIds.has(auctionId);
     var encodedId = auctionId.replace(/'/g, "\\'");
+
+    // オークションは price が「現在の最高入札額」なので、その旨を出す
+    var priceCell = item.isAuction
+      ? '現在 ¥' + Number(item.price).toLocaleString() + (isMercari ? '' : getTaxBadge(item.isStore)) + bidNote(item)
+      : '¥' + Number(item.price).toLocaleString() + getTaxBadge(item.isStore);
+
+    var timeCell = item.isAuction && item.bidDeadline
+      ? remainText(item.bidDeadline) + '<div class="cond">終了予定 ' + endText(item.bidDeadline) + '</div>'
+      : (item.endTime || '不明');
+
     rows += '<tr class="' + (checked ? 'checked' : '') + '" id="row' + i + '">' +
       '<td><button class="check-btn ' + (checked ? 'on' : '') + '" onclick="doCheck(\'' + encodedId + '\',' + i + ')">' + (checked ? '✓' : '') + '</button></td>' +
       '<td>' + item.model + '</td>' +
       '<td><a href="' + item.link + '" target="_blank">' + item.title + '</a></td>' +
-      '<td>' + getBadge(item.status) + (item.condition ? '<div class="cond">' + item.condition + '</div>' : '') + '</td>' +
-      '<td>¥' + Number(item.price).toLocaleString() + getTaxBadge(item.isStore) + '</td>' +
+      '<td>' + getBadge(item.status) + ' ' + getTypeBadge(item) +
+        (item.condition ? '<div class="cond">' + item.condition + '</div>' : '') + '</td>' +
+      '<td>' + priceCell + '</td>' +
       '<td>' + item.postage + '</td>' +
       '<td>' + calcTotal(item.price, item.postage) + '</td>' +
-      '<td>' + (item.endTime || '不明') + '</td>' +
+      '<td>' + timeCell + '</td>' +
+      (isMercari ? '<td>' + watchCell(item, encodedId, i) + '</td>' : '') +
       '</tr>';
   }
 
   document.getElementById('resultsBody').innerHTML =
-    '<table><thead><tr><th></th><th>機種</th><th>商品名</th><th>状態</th><th>' + (currentSource === 'mercari' ? '価格' : '現在価格') + '</th><th>送料</th><th>合計</th><th>' + source().timeHeader + '</th></tr></thead><tbody>' + rows + '</tbody></table>';
+    '<table><thead><tr><th></th><th>機種</th><th>商品名</th><th>状態</th><th>価格</th><th>送料</th><th>合計</th><th>' + source().timeHeader + '</th>' +
+    (isMercari ? '<th>終了通知</th>' : '') + '</tr></thead><tbody>' + rows + '</tbody></table>';
+
+  updateWatchCount();
+}
+
+// 監視ボタン。オークション以外は登録しても意味がないので出さない
+function watchCell(item, encodedId, i) {
+  if (!item.isAuction) return '<span style="color:#ccc;">-</span>';
+  var w = watchMap[getAuctionId(item.link)];
+  return '<button class="watch-btn' + (w ? ' on' : '') + '" onclick="doWatch(\'' + encodedId + '\',' + i + ')">' +
+    (w ? '通知ON ¥' + Number(w.maxPrice).toLocaleString() : '+ 通知') + '</button>';
+}
+
+function updateWatchCount() {
+  var el = document.getElementById('watchCount');
+  if (!el) return;
+  var n = Object.keys(watchMap).length;
+  el.innerHTML = currentSource === 'mercari' && n
+    ? '<span class="watch-count">終了通知を登録中: ' + n + '件</span>'
+    : '';
+}
+
+// 上限額を決めて登録するだけ。入札そのものは手動（メルカリは入札の取り消しができない）
+async function doWatch(id, i) {
+  var item = renderedItems[i];
+  if (!item) return;
+
+  if (watchMap[id]) {
+    if (!confirm('この商品の終了通知を解除しますか？\n\n' + item.title)) return;
+    await fetch('/api/watch', {
+      method: 'DELETE',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ id: id }),
+    });
+    delete watchMap[id];
+    renderTable(allItems);
+    return;
+  }
+
+  var suggested = item.priceLimit || '';
+  var input = prompt(
+    '入札の上限額（円）を入れてください。\n終了60分前・15分前・5分前に通知します（入札は手動です）。\n\n' +
+    item.title + '\n現在 ¥' + Number(item.price).toLocaleString(),
+    suggested);
+  if (!input) return;
+
+  var maxPrice = parseInt(String(input).replace(/[^0-9]/g, ''), 10);
+  if (!maxPrice) { alert('金額を数字で入れてください'); return; }
+
+  var res = await fetch('/api/watch', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ id: id, url: item.link, title: item.title, model: item.model, maxPrice: maxPrice }),
+  });
+  var data = await res.json();
+  if (!res.ok) { alert('登録に失敗しました: ' + (data.error || '')); return; }
+
+  watchMap[id] = data.entry;
+  renderTable(allItems);
 }
 
 async function doCheck(auctionId, i) {
@@ -337,6 +467,7 @@ async function startSearch() {
   document.getElementById('resultsBody').innerHTML = '';
 
   await loadChecked();
+  await loadWatch();
   hideChecked = hideCheckedBySource[currentSource];
   updateHideBtn();
 
