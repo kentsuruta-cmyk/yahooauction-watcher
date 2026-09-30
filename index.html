@@ -57,6 +57,11 @@ td a:hover { text-decoration: underline; }
 .watch-btn:hover { border-color: #0066cc; color: #0066cc; }
 .watch-btn.on { background: #0066cc; border-color: #0066cc; color: #fff; }
 .watch-count { color: #0066cc; font-size: 11px; }
+.badge-gold { background: #c9a227; color: #fff; }
+.badge-acc { background: #eee; color: #555; font-weight: normal; }
+.badge-unused { background: #7a3cc2; color: #fff; }
+.profit-plus { color: #00aa55; font-weight: bold; }
+.profit-minus { color: #e0003c; font-weight: bold; }
 </style>
 </head>
 <body>
@@ -67,11 +72,12 @@ td a:hover { text-decoration: underline; }
 <div class="tabs">
 <button class="tab active" id="tab-yahoo" onclick="switchTab('yahoo')">ヤフオク</button>
 <button class="tab" id="tab-mercari" onclick="switchTab('mercari')">メルカリ</button>
+<button class="tab" id="tab-pen" onclick="switchTab('pen')">万年筆</button>
 </div>
 <div class="container">
 <div class="card">
 <h2>▸ MONITOR CONFIG</h2>
-<p style="color:#888; font-size:12px; margin-bottom:8px;">
+<p id="targetNote" style="color:#888; font-size:12px; margin-bottom:8px;">
 監視対象：DMG / GBC / GBP / GBA / GBA SP / DS / DS Lite / DSi / DSi LL / 3DS / 3DS LL / PSP 1000・2000・3000
 </p>
 <p id="configNote" style="color:#aaa; font-size:11px; margin-bottom:16px;"></p>
@@ -112,6 +118,7 @@ var SOURCES = {
     endpoint: '/api/search',
     hideCheckedDefault: false,
     headerNote: 'ヤフオク新着ゲーム機モニタリングツール',
+    targetNote: '監視対象：DMG / GBC / GBP / GBA / GBA SP / DS / DS Lite / DSi / DSi LL / 3DS / 3DS LL / PSP 1000・2000・3000',
     configNote: '',
     resultNote: '※価格はヤフオク表示価格です。',
     timeHeader: '残り時間',
@@ -128,6 +135,7 @@ var SOURCES = {
     // 売れ残りを消したいときは「チェック済みを隠す」で切り替えられる
     hideCheckedDefault: false,
     headerNote: 'メルカリ新着ゲーム機モニタリングツール',
+    targetNote: '監視対象：DMG / GBC / GBP / GBA / GBA SP / DS / DS Lite / DSi / DSi LL / 3DS / 3DS LL / PSP 1000・2000・3000',
     configNote: '※メルカリは「送料込み」の出品のみ、各機種の「本体」カテゴリに限定して抽出します。',
     resultNote: '※送料込みの出品のみを対象にしているため、表示価格がそのまま総額です。',
     timeHeader: '出品',
@@ -137,17 +145,35 @@ var SOURCES = {
       return m ? m[1] : link;
     },
   },
+  pen: {
+    label: '万年筆',
+    endpoint: '/api/pens',
+    hideCheckedDefault: false,
+    headerNote: 'ヤフオク新着万年筆モニタリングツール',
+    targetNote: '監視対象：eBayで売れた実績のある型番（api/pens.js の PEN_MODELS）',
+    configNote: '※上限価格は「eBay売値 × 為替 × (1 − 手数料) − 送料」から、利益20%を残せる額で自動計算しています。まとめ売りは対象外です。',
+    resultNote: '※見込み利益 ＝ eBay売値からの手取り − ヤフオク合計（オークションは現在価格で計算）',
+    timeHeader: '残り時間',
+    loading: 'ヤフオクから万年筆の新着を取得中...',
+    idOf: function (link) {
+      var m = link.match(/\/auction\/([a-z0-9]+)/i);
+      return m ? m[1] : link;
+    },
+  },
 };
 
 // 「チェック済みを隠す」の状態はタブごとに保持する（初期値は SOURCES の hideCheckedDefault）
 var hideCheckedBySource = {
   yahoo: SOURCES.yahoo.hideCheckedDefault,
   mercari: SOURCES.mercari.hideCheckedDefault,
+  pen: SOURCES.pen.hideCheckedDefault,
 };
 
 var currentSource = 'yahoo';
 // 取得済みの結果はタブごとに保持し、タブを戻したときに再検索しなくて済むようにする
-var resultCache = { yahoo: null, mercari: null };
+var resultCache = { yahoo: null, mercari: null, pen: null };
+// 万年筆タブの「付属品ありのみ」
+var accOnly = false;
 
 function source() { return SOURCES[currentSource]; }
 
@@ -155,14 +181,17 @@ async function switchTab(name) {
   if (name === currentSource) return;
   currentSource = name;
 
-  document.getElementById('tab-yahoo').classList.toggle('active', name === 'yahoo');
-  document.getElementById('tab-mercari').classList.toggle('active', name === 'mercari');
+  Object.keys(SOURCES).forEach(function (key) {
+    document.getElementById('tab-' + key).classList.toggle('active', name === key);
+  });
   document.getElementById('headerNote').textContent = source().headerNote;
+  document.getElementById('targetNote').textContent = source().targetNote;
   document.getElementById('configNote').textContent = source().configNote;
   document.getElementById('resultNote').textContent = source().resultNote;
   document.getElementById('searchBtn').textContent = '🔍 ' + source().label + 'の新着を検索する';
 
   currentFilter = 'all';
+  accOnly = false;
   hideChecked = hideCheckedBySource[name];
   updateHideBtn();
 
@@ -316,15 +345,45 @@ function calcTotal(price, postage) {
 
 function buildFilterBtns() {
   var container = document.getElementById('filterBtns');
-  var active = MODEL_NAMES.filter(function(m) { return allItems.some(function(i) { return i.model === m; }); });
-  container.innerHTML = ['all'].concat(active).map(function(m) {
+  var names = MODEL_NAMES;
+  if (currentSource === 'pen') {
+    // 万年筆は型番がどんどん増えるので、結果に出てきた型番をそのままボタンにする
+    names = [];
+    allItems.forEach(function(i) { if (names.indexOf(i.model) < 0) names.push(i.model); });
+  }
+  var active = names.filter(function(m) { return allItems.some(function(i) { return i.model === m; }); });
+  var html = ['all'].concat(active).map(function(m) {
     return '<button class="filter-btn ' + (m === currentFilter ? 'active' : '') + '" onclick="setFilter(\'' + m + '\', this)">' +
       (m === 'all' ? 'すべて' : m) + '</button>';
   }).join('');
+  if (currentSource === 'pen') {
+    html += '<button class="hide-btn' + (accOnly ? ' active' : '') + '" onclick="toggleAccOnly(this)">付属品ありのみ</button>';
+  }
+  container.innerHTML = html;
 }
+
+function toggleAccOnly(btn) {
+  accOnly = !accOnly;
+  btn.classList.toggle('active', accOnly);
+  renderTable(allItems);
+}
+
+// 万年筆の特徴バッジ（金ペン・付属品・未使用）
+function penBadges(item) {
+  var html = '';
+  (item.goldMarks || []).forEach(function(k) { html += '<span class="badge badge-gold">' + k + '</span> '; });
+  if (item.isUnused) html += '<span class="badge badge-unused">未使用</span> ';
+  (item.accessories || []).forEach(function(a) { html += '<span class="badge badge-acc">' + a + '</span> '; });
+  return html + getTypeBadge(item);
+}
+
+function yen(n) { return '¥' + Number(n).toLocaleString(); }
 
 function renderTable(items) {
   var modelFiltered = currentFilter === 'all' ? items : items.filter(function(i) { return i.model === currentFilter; });
+  if (currentSource === 'pen' && accOnly) {
+    modelFiltered = modelFiltered.filter(function(i) { return (i.accessories || []).length > 0; });
+  }
   var filtered = hideChecked ? modelFiltered.filter(function(i) { return !checkedIds.has(getAuctionId(i.link)); }) : modelFiltered;
 
   var hiddenCount = modelFiltered.length - filtered.length;
@@ -339,6 +398,11 @@ function renderTable(items) {
 
   var isMercari = currentSource === 'mercari';
   renderedItems = filtered;
+
+  if (currentSource === 'pen') {
+    renderPenTable(filtered);
+    return;
+  }
 
   var rows = '';
   for (var i = 0; i < filtered.length; i++) {
@@ -374,6 +438,36 @@ function renderTable(items) {
     '<table><thead><tr><th></th><th>機種</th><th>商品名</th><th>状態</th><th>価格</th><th>送料</th><th>合計</th><th>' + source().timeHeader + '</th>' +
     (isMercari ? '<th>終了通知</th>' : '') + '</tr></thead><tbody>' + rows + '</tbody></table>';
 
+  updateWatchCount();
+}
+
+// 万年筆タブの表。見込み利益と上限価格を出す
+function renderPenTable(filtered) {
+  var rows = '';
+  for (var i = 0; i < filtered.length; i++) {
+    var item = filtered[i];
+    var auctionId = getAuctionId(item.link);
+    var checked = checkedIds.has(auctionId);
+    var encodedId = auctionId.replace(/'/g, "\\'");
+    var priceNote = item.isAuction
+      ? '<div class="cond">現在 ' + yen(item.price) + getTaxBadge(item.isStore) + '</div>' + bidNote(item)
+      : '<div class="cond">' + yen(item.price) + getTaxBadge(item.isStore) + ' / ' + item.shippingNote + '</div>';
+    var profitCls = item.expectedProfit >= 0 ? 'profit-plus' : 'profit-minus';
+
+    rows += '<tr class="' + (checked ? 'checked' : '') + '" id="row' + i + '">' +
+      '<td><button class="check-btn ' + (checked ? 'on' : '') + '" onclick="doCheck(\'' + encodedId + '\',' + i + ')">' + (checked ? '✓' : '') + '</button></td>' +
+      '<td>' + item.model + '<div class="cond">eBay $' + item.ebayUsd + '</div></td>' +
+      '<td><a href="' + item.link + '" target="_blank">' + item.title + '</a></td>' +
+      '<td>' + penBadges(item) + '</td>' +
+      '<td>' + yen(item.finalPrice) + priceNote + '</td>' +
+      '<td>' + yen(item.priceLimit) + '</td>' +
+      '<td class="' + profitCls + '">' + yen(item.expectedProfit) + '</td>' +
+      '<td>' + (item.endTime || '不明') + '</td>' +
+      '</tr>';
+  }
+  document.getElementById('resultsBody').innerHTML =
+    '<table><thead><tr><th></th><th>型番</th><th>商品名</th><th>特徴</th><th>合計</th><th>上限</th><th>見込み利益</th><th>残り時間</th></tr></thead><tbody>' +
+    rows + '</tbody></table>';
   updateWatchCount();
 }
 
@@ -474,10 +568,14 @@ async function startSearch() {
   try {
     var res = await fetch(source().endpoint);
     var data = await res.json();
-    allItems = (data.items || []).sort(function(a, b) { return toMinutes(a.endTime) - toMinutes(b.endTime); });
+    allItems = (data.items || []).sort(currentSource === 'pen'
+      // 万年筆は見込み利益の大きい順
+      ? function(a, b) { return b.expectedProfit - a.expectedProfit; }
+      : function(a, b) { return toMinutes(a.endTime) - toMinutes(b.endTime); });
     resultCache[currentSource] = allItems;
     document.getElementById('progressLog').innerHTML = '';
     currentFilter = 'all';
+    accOnly = false;
     buildFilterBtns();
     renderTable(allItems);
   } catch (e) {

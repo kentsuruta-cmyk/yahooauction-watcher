@@ -9,14 +9,26 @@ DS / DS Lite / DSi / DSi LL / 3DS / 3DS LL / PSP 1000・2000・3000）を監視�
 
 | ファイル | 役割 |
 | --- | --- |
-| `index.html` | 画面（ビルドなし。ヤフオク／メルカリの2タブ） |
+| `index.html` | 画面（ビルドなし。ヤフオク／メルカリ／万年筆の3タブ） |
 | `api/search.js` | ヤフオク検索（スクレイピング。`MODELS` が抽出条件の本体） |
+| `api/pens.js` | 万年筆タブのヤフオク検索（`PEN_MODELS` と `PEN_CONFIG` が設定の本体） |
 | `api/mercari.js` | メルカリ検索（内部API + DPoP） |
 | `api/checked.js` | チェック済みの保存（Upstash Redis） |
 | `api/watch.js` | メルカリのオークション終了通知リストの登録・解除 |
 | `api/watch-check.js` | 監視中オークションの確認と通知（GitHub Actions から5分おき） |
 | `lib/mercari-client.js` | メルカリ内部APIの共通クライアント（DPoP・商品取得） |
 | `lib/watch-store.js` | 通知リストの保存先（Upstash Redis） |
+
+## 万年筆タブ
+
+eBayで売れた実績のある型番だけを、1本ずつ仕入れる前提で監視する（まとめ売りは対象外）。
+仕様は `SPEC-fountain-pen-tab.md`。
+
+- **型番を増やす**：`api/pens.js` の `PEN_MODELS` に1つ足し、eBayで売れた価格（ドル）を `ebayUsd` に書く
+- **上限価格** ＝ (eBay売値 × `usdJpy` × (1 − `feeRate`) − `shippingJpy`) ÷ (1 + `profitRate`)。
+  `maxBudget` を超える場合は `maxBudget` で止まる
+- 為替・手数料・送料が変わったら `PEN_CONFIG` の数字を書き換えるだけで全型番に反映される
+- チェック済みは Redis の `pen:checked` に保存（ゲーム機とは別）
 
 ## オークション終了通知（メルカリ）
 
