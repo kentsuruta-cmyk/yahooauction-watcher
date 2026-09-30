@@ -15,12 +15,10 @@ async function redisCommand(...args) {
 }
 
 // チェック済みの保存先キー。ヤフオクは従来どおり 'checked'、
-// メルカリは 'mercari:'、万年筆は 'pen:' 接頭辞を付けた別キーに分けて保持する。
+// メルカリは 'mercari:' 接頭辞を付けた別キーに分けて保持する。
 function keyFor(req) {
   const source = (req.query && req.query.source) || (req.body && req.body.source);
-  if (source === 'mercari') return 'mercari:checked';
-  if (source === 'pen') return 'pen:checked';
-  return 'checked';
+  return source === 'mercari' ? 'mercari:checked' : 'checked';
 }
 
 module.exports = async (req, res) => {
