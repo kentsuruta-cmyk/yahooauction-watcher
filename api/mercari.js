@@ -18,7 +18,7 @@
 // ─────────────────────────────────────────────────────────────────────────────
 
 const crypto = require('crypto');
-const { createDpopToken } = require('../lib/mercari-client');
+const { createDpopToken, fetchItem } = require('../lib/mercari-client');
 
 const MERCARI_ENDPOINT = 'https://api.mercari.jp/v2/entities:search';
 
@@ -205,6 +205,25 @@ const MAX_LISTING_AGE_DAYS = 90;
 // 出品者がカテゴリを間違えて「本体」カテゴリに空箱や説明書だけを出しているケースを弾く。
 const MERCARI_NG_WORDS = ['空箱', '箱のみ', '説明書のみ', '取説のみ', 'ケースのみ', '外箱のみ'];
 
+// オークションが落札されると、メルカリは商品名の先頭に落札者の伏せ字名（例:「さ*お様 」）を付ける。
+// この状態の出品は「落札者の支払い待ち」で他の人は買えないのに、検索APIでは販売中
+// （ITEM_STATUS_ON_SALE・auction は null）のまま返ってくる（2026-10-06 実測）。
+const WINNER_PREFIX = /^\S{1,10}\*\S{0,10}様[\s　]/;
+
+// 落札者名が付いた出品だけ商品単体APIで確かめ、いまは買えないもの（支払い待ち・売り切れ）なら true。
+// 支払い期限切れで通常出品に戻ったもの（STATE_END かつ on_sale）は買えるので残す。
+// 確認に失敗したときは、売れた商品を出すより出さない方に倒す。
+async function isUnavailable(itemId) {
+  try {
+    const item = await fetchItem(itemId);
+    if (item.status !== 'on_sale') return true;
+    return !!item.auction_info && item.auction_info.state === 'STATE_WINNER_PERIOD';
+  } catch (e) {
+    console.error(`items/get failed for ${itemId}:`, e.message);
+    return true;
+  }
+}
+
 // ヤフオク版と同じデフォルト検索枠（ジャンク枠 + 中古枠）
 const SEARCH_TYPES = [
   { status: 'ジャンク', istatus: '3,4,5' },
@@ -370,6 +389,8 @@ function relativeTime(created) {
 
 module.exports = async (req, res) => {
   res.setHeader('Access-Control-Allow-Origin', '*');
+  // 毎回かならず取り直す（ブラウザやCDNに古い一覧を持たせない）
+  res.setHeader('Cache-Control', 'no-store, max-age=0');
 
   const query = req.query || {};
   const modelName = query.model;
@@ -414,6 +435,9 @@ module.exports = async (req, res) => {
 
           const title = item.name || '';
           if (!title) continue;
+
+          // 検索インデックスの反映遅れで売り切れ・取引中が混ざった場合に備えて、状態も見る
+          if (item.status && item.status !== 'ITEM_STATUS_ON_SALE') continue;
 
           // 出品から90日以上たっているものは売れ残りとみなして除外する
           const createdSec = Number(item.created) || 0;
@@ -471,6 +495,8 @@ module.exports = async (req, res) => {
             initialPrice: auc ? Number(auc.initialPrice) || null : null,
             created: Number(item.created) || null,
             status,
+            // 落札者名付き（＝落札済みの疑いあり）。あとで商品単体APIで確かめる
+            suspectSold: WINNER_PREFIX.test(title) && item.itemType === 'ITEM_TYPE_MERCARI',
             condition: conditionId ? MERCARI_CONDITIONS[conditionId] : '',
             postage: '送料込み',
             isStore: true, // メルカリの表示価格は常に税込
@@ -482,10 +508,17 @@ module.exports = async (req, res) => {
       }
     }
 
-    // 新着順（出品が新しい順）で返す
-    results.sort((a, b) => (b.created || 0) - (a.created || 0));
+    // 落札済みの疑いがある出品だけ、商品単体APIで現在の状態を確かめて落とす（通常は数件）
+    const suspects = results.filter(r => r.suspectSold);
+    const unavailable = await Promise.all(suspects.map(r => isUnavailable(r.link.split('/').pop())));
+    const drop = new Set(suspects.filter((_, i) => unavailable[i]).map(r => r.link));
+    const live = results.filter(r => !drop.has(r.link));
+    for (const r of live) delete r.suspectSold;
 
-    return res.status(200).json({ items: results });
+    // 新着順（出品が新しい順）で返す
+    live.sort((a, b) => (b.created || 0) - (a.created || 0));
+
+    return res.status(200).json({ items: live, fetchedAt: Date.now() });
   } catch (err) {
     return res.status(500).json({ error: err.message });
   }

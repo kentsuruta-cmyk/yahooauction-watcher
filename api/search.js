@@ -227,8 +227,12 @@ async function searchYahooAuction(query, istatus) {
     headers: {
       'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/120.0.0.0 Safari/537.36',
       'Accept-Language': 'ja,en;q=0.9',
+      'Cache-Control': 'no-cache',
+      'Pragma': 'no-cache',
     }
   });
+  // ブロック時のエラーページ（HTTP 500）を「0件」と取り違えないよう、失敗は失敗として上げる
+  if (!res.ok) throw new Error(`yahoo ${res.status}`);
   const html = await res.text();
   const $ = cheerio.load(html);
   const items = [];
@@ -257,6 +261,12 @@ async function searchYahooAuction(query, istatus) {
 
     if (!title || !link) return;
 
+    // 終了時刻（epoch秒）。検索結果の各出品に data-auction-endtime として必ず入っている。
+    // 「残り3日」のような丸めた表示ではなく、これを正として終了済みを落とす
+    const endEpoch = parseInt($(el).find('[data-auction-endtime]').first().attr('data-auction-endtime'), 10);
+    const endAt = endEpoch > 0 ? endEpoch * 1000 : null;
+    if (endAt && endAt <= Date.now()) return;
+
     const endTime = parseEndTime(endTimeText);
     const now = new Date();
     if (endTime && endTime <= now) return;
@@ -267,6 +277,7 @@ async function searchYahooAuction(query, istatus) {
       link,
       priceText,
       endTime: endTimeText,
+      endAt,
       postageText: postageText || '',
       isStore,
       taxLabel: priceLabel,
@@ -281,6 +292,8 @@ async function searchYahooAuction(query, istatus) {
 
 module.exports = async (req, res) => {
   res.setHeader('Access-Control-Allow-Origin', '*');
+  // 毎回かならず取り直す（ブラウザやCDNに古い一覧を持たせない）
+  res.setHeader('Cache-Control', 'no-store, max-age=0');
 
   try {
     const results = [];
@@ -339,6 +352,8 @@ module.exports = async (req, res) => {
               finalPrice,
               shippingNote: shipping.note,
               endTime: item.endTime,
+              // 終了時刻（epochミリ秒）。画面側で残り時間を刻み、終了した行を自動で消すのに使う
+              endAt: item.endAt,
               status,
               postage: item.postageText || '送料不明',
               isStore: item.isStore,
@@ -356,7 +371,7 @@ module.exports = async (req, res) => {
       }
     }
 
-    return res.status(200).json({ items: results });
+    return res.status(200).json({ items: results, fetchedAt: Date.now() });
   } catch (err) {
     return res.status(500).json({ error: err.message });
   }

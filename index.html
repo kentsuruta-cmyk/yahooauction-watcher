@@ -91,6 +91,7 @@ td a:hover { text-decoration: underline; }
 </div>
 </div>
 <p class="note" id="resultNote">※価格はヤフオク表示価格です。</p>
+<p class="note" id="refreshNote"></p>
 <div id="progressLog"></div>
 <div id="resultsBody"></div>
 </div>
@@ -174,6 +175,9 @@ async function switchTab(name) {
     document.getElementById('progressLog').innerHTML = '';
     buildFilterBtns();
     renderTable(allItems);
+    updateRefreshNote();
+    // 前に取得してから時間がたっていれば、すぐ取り直す
+    autoRefresh();
   } else {
     allItems = [];
     document.getElementById('resultsCard').style.display = 'none';
@@ -352,8 +356,10 @@ function renderTable(items) {
       ? '現在 ¥' + Number(item.price).toLocaleString() + (isMercari ? '' : getTaxBadge(item.isStore)) + bidNote(item)
       : '¥' + Number(item.price).toLocaleString() + getTaxBadge(item.isStore);
 
-    var timeCell = item.isAuction && item.bidDeadline
-      ? remainText(item.bidDeadline) + '<div class="cond">終了予定 ' + endText(item.bidDeadline) + '</div>'
+    // ヤフオクは endAt（終了時刻）、メルカリのオークションは bidDeadline から残り時間をその場で計算する
+    var deadline = item.endAt || (item.isAuction && item.bidDeadline);
+    var timeCell = deadline
+      ? remainText(deadline) + '<div class="cond">終了予定 ' + endText(deadline) + '</div>'
       : (item.endTime || '不明');
 
     rows += '<tr class="' + (checked ? 'checked' : '') + '" id="row' + i + '">' +
@@ -458,7 +464,52 @@ function setFilter(filter, btn) {
   btn.classList.add('active');
   renderTable(allItems);
 }
+// ── ほぼリアルタイム反映 ─────────────────────────────────────────────
+// 一度検索したタブは、画面を開いている間 AUTO_REFRESH_MS ごとに自動で取り直す。
+// その合間も TICK_MS ごとに残り時間を計算し直し、終了時刻を過ぎた行はその場で消す。
+var AUTO_REFRESH_MS = 3 * 60 * 1000;
+var TICK_MS = 30 * 1000;
+var fetchedAt = { yahoo: 0, mercari: 0 };
+var loading = false;
+
+function sortItems(items) {
+  return items.sort(function(a, b) {
+    if (a.endAt && b.endAt) return a.endAt - b.endAt;
+    return toMinutes(a.endTime) - toMinutes(b.endTime);
+  });
+}
+
+// 終了時刻を過ぎた出品を落とす（ヤフオクは endAt。メルカリのオークションは延長があるので対象外）
+function dropEnded(items) {
+  var now = Date.now();
+  return items.filter(function(i) { return !i.endAt || i.endAt > now; });
+}
+
+function updateRefreshNote(error) {
+  var el = document.getElementById('refreshNote');
+  var at = fetchedAt[currentSource];
+  if (!at) { el.textContent = ''; return; }
+  var d = new Date(at);
+  el.textContent = '最終更新 ' + ('0' + d.getHours()).slice(-2) + ':' + ('0' + d.getMinutes()).slice(-2) +
+    '（' + (AUTO_REFRESH_MS / 60000) + '分ごとに自動更新）' + (error ? ' ※直近の自動更新に失敗しました' : '');
+}
+
+// 検索APIを叩いて一覧を差し替える。取得中にタブを切り替えられても、取得元のタブに結果を入れる
+async function fetchItems() {
+  var name = currentSource;
+  var res = await fetch(SOURCES[name].endpoint + '?t=' + Date.now(), { cache: 'no-store' });
+  var data = await res.json();
+  if (!res.ok || !data.items) throw new Error(data.error || 'fetch failed');
+  var items = sortItems(dropEnded(data.items));
+  resultCache[name] = items;
+  fetchedAt[name] = Date.now();
+  if (name === currentSource) allItems = items;
+}
+
 async function startSearch() {
+  // 自動更新の取得中に押された場合は、それが終わるのを待ってから取り直す
+  while (loading) await new Promise(function(r) { setTimeout(r, 200); });
+  loading = true;
   var btn = document.getElementById('searchBtn');
   btn.disabled = true;
   btn.textContent = '⏳ ' + source().label + 'を検索中...';
@@ -472,21 +523,60 @@ async function startSearch() {
   updateHideBtn();
 
   try {
-    var res = await fetch(source().endpoint);
-    var data = await res.json();
-    allItems = (data.items || []).sort(function(a, b) { return toMinutes(a.endTime) - toMinutes(b.endTime); });
-    resultCache[currentSource] = allItems;
+    await fetchItems();
     document.getElementById('progressLog').innerHTML = '';
     currentFilter = 'all';
     buildFilterBtns();
     renderTable(allItems);
+    updateRefreshNote();
   } catch (e) {
     document.getElementById('progressLog').innerHTML = '<div class="status" style="color:#e0003c;">エラーが発生しました。もう一度お試しください。</div>';
   }
 
+  loading = false;
   btn.disabled = false;
   btn.textContent = '🔍 ' + source().label + 'の新着を検索する';
 }
+
+// 自動更新。表を消さずに裏で取り直し、選択中の機種フィルタもそのまま保つ
+async function autoRefresh() {
+  if (loading || document.hidden || !fetchedAt[currentSource]) return;
+  if (Date.now() - fetchedAt[currentSource] < AUTO_REFRESH_MS) return;
+  loading = true;
+  var name = currentSource;
+  var failed = false;
+  try {
+    await fetchItems();
+  } catch (e) {
+    failed = true;
+  }
+  loading = false;
+  if (name !== currentSource) return;
+  if (!failed) {
+    await loadChecked();
+    if (currentFilter !== 'all' && !allItems.some(function(i) { return i.model === currentFilter; })) currentFilter = 'all';
+    buildFilterBtns();
+    renderTable(allItems);
+  }
+  updateRefreshNote(failed);
+}
+
+// 残り時間の刻み直しと、終了した行の除去
+function tick() {
+  if (document.hidden || !fetchedAt[currentSource] || loading) return;
+  var live = dropEnded(allItems);
+  if (live.length !== allItems.length) {
+    allItems = live;
+    resultCache[currentSource] = live;
+    buildFilterBtns();
+  }
+  renderTable(allItems);
+  autoRefresh();
+}
+
+setInterval(tick, TICK_MS);
+// 別のタブやアプリから戻ってきたら、その場で最新にする
+document.addEventListener('visibilitychange', function() { if (!document.hidden) tick(); });
 </script>
 </body>
 </html>
