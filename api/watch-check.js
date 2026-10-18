@@ -5,6 +5,7 @@
 // なので「自動で入札する」のではなく「終了前に必ず気付ける」ところまでを機械の仕事にしている。
 const { fetchItem, normalizeAuction } = require('../lib/mercari-client');
 const { readAll, writeEntry, removeEntry } = require('../lib/watch-store');
+const { notify } = require('../lib/notify');
 
 // 残り何分の時点で通知するか。cron が5分間隔なので、実際は少し手前で飛ぶ。
 const THRESHOLDS = [60, 15, 5];
@@ -28,31 +29,6 @@ function jst(epochSec) {
     minute: '2-digit',
   }).format(d);
   return p;
-}
-
-// Discord / Slack / ntfy のどれでも同じ呼び方で飛ばせるようにする
-async function notify(text) {
-  if (!WEBHOOK_URL) return { sent: false, reason: 'NOTIFY_WEBHOOK_URL not set' };
-
-  let init;
-  if (WEBHOOK_URL.includes('ntfy.sh')) {
-    init = { method: 'POST', headers: { 'Content-Type': 'text/plain; charset=utf-8' }, body: text };
-  } else {
-    // Discord は content、Slack は text を読む
-    const isSlack = WEBHOOK_URL.includes('hooks.slack.com');
-    init = {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(isSlack ? { text } : { content: text }),
-    };
-  }
-
-  const res = await fetch(WEBHOOK_URL, init);
-  if (!res.ok) {
-    const body = await res.text();
-    return { sent: false, reason: `${res.status}: ${body.slice(0, 200)}` };
-  }
-  return { sent: true };
 }
 
 function buildMessage(kind, entry, auction, minutesLeft) {

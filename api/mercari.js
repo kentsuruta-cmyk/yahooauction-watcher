@@ -422,6 +422,7 @@ module.exports = async (req, res) => {
     }
 
     const results = [];
+    const errors = [];
     const seen = new Set();
 
     for (const model of targets) {
@@ -505,7 +506,13 @@ module.exports = async (req, res) => {
         }
       } catch (e) {
         console.error(`Error for ${model.name}:`, e.message);
+        errors.push({ model: model.name, message: e.message });
       }
+    }
+
+    // 全滅は「0件」ではなく故障として返す（DPoP の仕様変更などで401が続くと、黙って0件になっていた）
+    if (errors.length === targets.length) {
+      return res.status(502).json({ error: `メルカリの検索がすべて失敗しました: ${errors[0].message}`, errors });
     }
 
     // 落札済みの疑いがある出品だけ、商品単体APIで現在の状態を確かめて落とす（通常は数件）
@@ -518,8 +525,10 @@ module.exports = async (req, res) => {
     // 新着順（出品が新しい順）で返す
     live.sort((a, b) => (b.created || 0) - (a.created || 0));
 
-    return res.status(200).json({ items: live, fetchedAt: Date.now() });
+    return res.status(200).json({ items: live, errors, fetchedAt: Date.now() });
   } catch (err) {
     return res.status(500).json({ error: err.message });
   }
 };
+
+module.exports.searchMercari = searchMercari;

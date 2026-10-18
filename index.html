@@ -470,6 +470,12 @@ function setFilter(filter, btn) {
 var AUTO_REFRESH_MS = 3 * 60 * 1000;
 var TICK_MS = 30 * 1000;
 var fetchedAt = { yahoo: 0, mercari: 0 };
+// 一部の機種だけ検索に失敗したときの中身（全滅のときは fetchItems が例外にする）
+var fetchErrors = { yahoo: [], mercari: [] };
+
+function escapeText(s) {
+  return String(s).replace(/[&<>"]/g, function(c) { return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]; });
+}
 var loading = false;
 
 function sortItems(items) {
@@ -491,15 +497,23 @@ function updateRefreshNote(error) {
   if (!at) { el.textContent = ''; return; }
   var d = new Date(at);
   el.textContent = '最終更新 ' + ('0' + d.getHours()).slice(-2) + ':' + ('0' + d.getMinutes()).slice(-2) +
-    '（' + (AUTO_REFRESH_MS / 60000) + '分ごとに自動更新）' + (error ? ' ※直近の自動更新に失敗しました' : '');
+    '（' + (AUTO_REFRESH_MS / 60000) + '分ごとに自動更新）' + (error ? ' ※直近の自動更新に失敗しました: ' + error : '');
+  var errs = fetchErrors[currentSource] || [];
+  if (errs.length) {
+    var names = errs.map(function(e) { return e.model; }).filter(function(m, i, a) { return a.indexOf(m) === i; });
+    el.textContent += ' ⚠ ' + names.join('・') + ' の検索に失敗（' + errs[0].message + '）';
+  }
 }
 
 // 検索APIを叩いて一覧を差し替える。取得中にタブを切り替えられても、取得元のタブに結果を入れる
 async function fetchItems() {
   var name = currentSource;
   var res = await fetch(SOURCES[name].endpoint + '?t=' + Date.now(), { cache: 'no-store' });
-  var data = await res.json();
-  if (!res.ok || !data.items) throw new Error(data.error || 'fetch failed');
+  var data = null;
+  try { data = await res.json(); } catch (e) { /* タイムアウト時などはJSONでなくHTMLが返る */ }
+  if (!data) throw new Error('サーバーから正しい応答がありません（HTTP ' + res.status + (res.status === 504 ? '・時間切れ' : '') + '）');
+  if (!res.ok || !data.items) throw new Error(data.error || ('HTTP ' + res.status));
+  fetchErrors[name] = data.errors || [];
   var items = sortItems(dropEnded(data.items));
   resultCache[name] = items;
   fetchedAt[name] = Date.now();
@@ -530,7 +544,9 @@ async function startSearch() {
     renderTable(allItems);
     updateRefreshNote();
   } catch (e) {
-    document.getElementById('progressLog').innerHTML = '<div class="status" style="color:#e0003c;">エラーが発生しました。もう一度お試しください。</div>';
+    // 原因（ページ構造の変更・ブロック・時間切れなど）をそのまま見せる
+    document.getElementById('progressLog').innerHTML = '<div class="status" style="color:#e0003c;">エラーが発生しました: ' +
+      escapeText(e.message) + '<br>時間をおいてもう一度お試しください。続くようならサイト側の仕様変更の可能性があります。</div>';
   }
 
   loading = false;
@@ -548,7 +564,7 @@ async function autoRefresh() {
   try {
     await fetchItems();
   } catch (e) {
-    failed = true;
+    failed = e.message || '不明なエラー';
   }
   loading = false;
   if (name !== currentSource) return;
