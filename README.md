@@ -14,9 +14,28 @@ DS / DS Lite / DSi / DSi LL / 3DS / 3DS LL / PSP 1000・2000・3000）を監視�
 | `api/mercari.js` | メルカリ検索（内部API + DPoP） |
 | `api/checked.js` | チェック済みの保存（Upstash Redis） |
 | `api/watch.js` | メルカリのオークション終了通知リストの登録・解除 |
+| `api/sp-alert.js` | GBA SP の新着（説明文に基盤なしが無いもの）を LINE に通知 |
 | `api/watch-check.js` | 監視中オークションの確認と通知（GitHub Actions から5分おき） |
 | `lib/mercari-client.js` | メルカリ内部APIの共通クライアント（DPoP・商品取得） |
 | `lib/watch-store.js` | 通知リストの保存先（Upstash Redis） |
+
+## GBA SP の新着通知（LINE）
+
+`api/sp-alert.js`。GitHub Actions が5分おきに叩く（`auction-watch.yml` の2つ目のステップ）。
+
+1. ヤフオク・メルカリで GBA SP を、画面と同じ条件（上限価格など）で探す
+2. いますぐ買えるもの（ヤフオクの定額・即決価格あり、メルカリの通常出品）だけを残す。オークションは対象外
+3. 初めて見る出品だけ商品ページの説明文を読み、「基盤なし」（基板・無し・欠品の表記ゆれ、外装のみ・部品取りなども）が無ければ LINE に通知
+4. 見た出品は Redis の `spalert:seen` に記録して二度通知しない。1回の通知は5件まで
+
+**購入は自動で行わない**（両サイトとも購入の公式APIが無く、ログイン状態の自動操作は規約違反になりうるため）。通知のリンクから自分で買う。
+
+| 変数（Vercel） | 用途 |
+| --- | --- |
+| `LINE_CHANNEL_ACCESS_TOKEN` | LINE Developers の Messaging API チャネルのアクセストークン（長期） |
+| `LINE_USER_ID` | 送り先（自分）のユーザーID。チャネルの「Basic settings」の Your user ID |
+
+LINE が未設定のときは `NOTIFY_WEBHOOK_URL` に送る。確認：`/api/sp-alert?test=1`（テスト送信）、`/api/sp-alert?dry=1`（通知せず判定だけ）。
 
 ## オークション終了通知（メルカリ）
 

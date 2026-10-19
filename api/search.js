@@ -225,12 +225,13 @@ async function searchYahooAuction(query, istatus) {
 }
 
 // 1回の検索で全機種を回す。失敗した検索は errors に積み、画面に原因を出せるようにする
-async function collect() {
+// onlyModel を渡すと、その機種だけ検索する（GBA SP の新着通知 api/sp-alert.js から使う）
+async function collect(onlyModel) {
   const results = [];
   const errors = [];
   const seen = new Set();
   let searches = 0;
-  for (const model of MODELS) {
+  for (const model of MODELS.filter(m => !onlyModel || m.name === onlyModel)) {
     for (const searchType of (model.searchTypes || SEARCH_TYPES)) {
       searches++;
       try {
@@ -302,7 +303,8 @@ module.exports = async (req, res) => {
   // 毎回かならず取り直す（ブラウザやCDNに古い一覧を持たせない）
   res.setHeader('Cache-Control', 'no-store, max-age=0');
   try {
-    const { results, errors, searches } = await collect();
+    const { results, errors, searches } = await collect((req.query || {}).model);
+    if (searches === 0) return res.status(400).json({ error: `unknown model: ${(req.query || {}).model}` });
     // 全滅は「0件」ではなく故障として返す（以前はページ構造の変更で0件のまま気付けなかった）
     if (errors.length === searches) {
       return res.status(502).json({ error: `ヤフオクの検索がすべて失敗しました: ${errors[0].message}`, errors });
@@ -314,3 +316,4 @@ module.exports = async (req, res) => {
 };
 
 module.exports.searchYahooAuction = searchYahooAuction;
+module.exports.collect = collect;

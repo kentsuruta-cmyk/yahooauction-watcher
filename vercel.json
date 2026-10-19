@@ -1,5 +1,8 @@
 {
   "version": 2,
+  "functions": {
+    "api/sp-alert.js": { "maxDuration": 60 }
+  },
   "crons": [
     { "path": "/api/health?notify=1", "schedule": "0 23 * * *" }
   ]

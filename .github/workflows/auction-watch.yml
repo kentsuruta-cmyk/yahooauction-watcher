@@ -11,3 +11,5 @@ jobs:
     steps:
       - name: 終了間際のオークションを確認して通知する
         run: curl -fsS -m 60 "https://yahooauction-watcher.vercel.app/api/watch-check"
+      - name: GBA SP の新着（基盤なしを除く）を LINE に通知する
+        run: curl -fsS -m 60 "https://yahooauction-watcher.vercel.app/api/sp-alert"
