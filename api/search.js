@@ -210,7 +210,12 @@ async function searchYahooAuction(query, istatus) {
     const seller = it.seller || {};
     items.push({
       title: it.title,
-      link: `https://auctions.yahoo.co.jp/jp/auction/${it.auctionId}`,
+      // 2026-10 から、ヤフオクの検索結果に Yahoo!フリマ（旧PayPayフリマ）の出品が混ざるようになった。
+      // フリマの出品（IDが z で始まる）はヤフオクの商品ページに存在しないので、フリマ側のURLにする
+      link: it.isFleamarketItem
+        ? `https://paypayfleamarket.yahoo.co.jp/item/${it.auctionId}`
+        : `https://auctions.yahoo.co.jp/jp/auction/${it.auctionId}`,
+      isFleamarket: !!it.isFleamarketItem,
       // price は画面の「現在 ◯円」と同じ（ストアは税込）
       price: Number(it.price) || 0,
       endAt,
@@ -286,6 +291,7 @@ async function collect(onlyModel) {
             isAuction: item.isAuction,
             bidCount: item.bidCount,
             buyNowPrice: item.buyNowPrice,
+            isFleamarket: item.isFleamarket,
             priceLimit: model.priceLimits ? model.priceLimits[status] : null,
           });
         }

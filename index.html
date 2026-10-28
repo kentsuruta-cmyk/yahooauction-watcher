@@ -118,7 +118,8 @@ var SOURCES = {
     timeHeader: '残り時間',
     loading: 'ヤフオクから新着を取得中...',
     idOf: function (link) {
-      var m = link.match(/\/auction\/([a-z0-9]+)/i);
+      // フリマの出品は /item/z… の形（チェック済みのIDは従来どおり z… で揃う）
+      var m = link.match(/\/(?:auction|item)\/([a-z0-9]+)/i);
       return m ? m[1] : link;
     },
   },
@@ -289,6 +290,7 @@ function getBadge(status) {
 
 // オークションか定額かを一目で分かるようにする（ヤフオク・メルカリ共通）
 function getTypeBadge(item) {
+  if (item.isFleamarket) return '<span class="badge badge-fixed">フリマ</span>';
   return item.isAuction
     ? '<span class="badge badge-auction">オークション</span>'
     : '<span class="badge badge-fixed">定額</span>';
