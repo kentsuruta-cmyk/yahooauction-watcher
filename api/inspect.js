@@ -5,7 +5,8 @@
 //   × ng     … 画面が真っ黒・割れ・「電源入らず」などの記載、または動作の根拠が何もない
 //   ? unknown… 判定できなかった（写真が取れない・AIの設定が無いなど）
 //
-// GBA / GBA SP はジャンクも仕入れ対象なので、× にはしない（◎ か △ のどちらか）。
+// GBA はジャンクも仕入れ対象なので、× にはしない（◎ か △ のどちらか）。
+// GBA SP は画面が見えなくても動作未確認でも、「基板なし」などの記載が無ければ ◎（あれば ×）。
 //
 // 1. 説明文とタイトルのキーワードで先にふるう（無料）
 // 2. 残ったものだけ、写真を AI（Claude）に見せて判定する
@@ -15,10 +16,12 @@
 //   GET  /api/inspect?link=...&model=...&title=...&fresh=1 … 1件だけ（動作確認用。fresh=1 で保存を無視）
 const { fetchItem } = require('../lib/mercari-client');
 const { redisCommand } = require('../lib/watch-store');
+const spRules = require('../lib/sp-rules');
 
 const ANTHROPIC_API_KEY = process.env.ANTHROPIC_API_KEY;
 const ANTHROPIC_MODEL = process.env.ANTHROPIC_MODEL || 'claude-haiku-5-5';
-const CACHE_PREFIX = 'inspect:v1:';
+// 判定ルールを変えたら版を上げる（古い判定を使い回さないため）。v2: GBA SP は基板なしの記載が無ければ ◎
+const CACHE_PREFIX = 'inspect:v2:';
 const CACHE_TTL_SEC = 14 * 24 * 60 * 60;
 const MAX_ITEMS_PER_CALL = 8;
 const MAX_IMAGES = 6; // AIに見せる写真の枚数（先頭から）
@@ -221,6 +224,13 @@ async function inspectOne({ link, model, title }) {
   const base = { images, firstImage: images[0] || null };
   const working = workingWordIn(text);
 
+  // GBA SP：基板なし系の記載だけで決める。写真は一覧に点灯写真を出すためだけにAIに見せる
+  const isSp = model === 'ゲームボーイアドバンスSP';
+  if (isSp) {
+    const noBoard = spRules.ngWordIn(text);
+    if (noBoard) return Object.assign(base, { verdict: 'ng', reason: `「${noBoard}」の記載あり`, by: 'text' });
+  }
+
   // 1. キーワードで × （GBA / GBA SP は除く）
   if (!junkOk) {
     const ng = findWord(text, NG_TEXT_WORDS);
@@ -228,19 +238,29 @@ async function inspectOne({ link, model, title }) {
   }
 
   // 2. 写真を AI に見せる
+  const spOk = { verdict: 'ok', reason: 'SP：基板なしの記載なし' };
   if (!ANTHROPIC_API_KEY) {
+    if (isSp) return Object.assign(base, spOk, { by: 'text' });
     return Object.assign(base, { verdict: 'unknown', reason: 'AI未設定（ANTHROPIC_API_KEY）', by: 'none', noCache: true });
   }
   if (!images.length) {
+    if (isSp) return Object.assign(base, spOk, { by: 'text' });
     return Object.assign(base, { verdict: working ? 'maybe' : (junkOk ? 'maybe' : 'ng'), reason: '写真なし', by: 'text' });
   }
   const loaded = (await Promise.all(images.map(loadImage)));
   const usable = [];
   loaded.forEach((img, i) => { if (img) usable.push({ img, src: images[i] }); });
   if (!usable.length) {
+    if (isSp) return Object.assign(base, spOk, { by: 'text' });
     return Object.assign(base, { verdict: 'unknown', reason: '写真を読み込めませんでした', by: 'none', noCache: true });
   }
-  const ai = await askAi(usable.map((u) => u.img));
+  let ai;
+  try {
+    ai = await askAi(usable.map((u) => u.img));
+  } catch (e) {
+    if (isSp) return Object.assign(base, spOk, { by: 'text' }); // SP は写真が見られなくても判定は変わらない
+    throw e;
+  }
   const idx = Number.isInteger(ai.screen_on_index) && usable[ai.screen_on_index] ? ai.screen_on_index : null;
   const screenImage = idx !== null ? usable[idx].src : null;
   const out = Object.assign(base, {
@@ -250,6 +270,7 @@ async function inspectOne({ link, model, title }) {
     comment: String(ai.comment || '').slice(0, 60),
   });
 
+  if (isSp) return Object.assign(out, spOk);
   if (ai.cracked && !junkOk) return Object.assign(out, { verdict: 'ng', reason: '画面割れの疑い' });
   if (ai.screen_dead && !junkOk) return Object.assign(out, { verdict: 'ng', reason: '液晶が死んでいる疑い' });
   if (screenImage) return Object.assign(out, { verdict: 'ok', reason: '画面点灯の写真あり' });

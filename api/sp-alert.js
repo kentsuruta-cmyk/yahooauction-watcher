@@ -23,17 +23,8 @@ const SEEN_KEY = 'spalert:seen';          // Set: 見たことのある出品（
 const SEEN_TTL_SEC = 60 * 24 * 60 * 60;   // 60日で忘れる（Set ごと延長し続ける）
 const MAX_NOTIFY_PER_RUN = 5;             // 1回に送る通知の上限（残りは次の回に回す）
 
-// 説明文・タイトルにこの語があれば通知しない（「基盤」と「基板」の表記ゆれも含める）
-const NG_DESC_WORDS = [
-  '基盤なし', '基盤無し', '基盤欠品', '基盤無', '基板なし', '基板無し', '基板欠品', '基板無',
-  '中身なし', '中身無し', '外装のみ', 'シェルのみ', 'ガワのみ', 'ハウジングのみ', '部品取り',
-];
+const { ngWordIn } = require('../lib/sp-rules');
 
-function norm(s) { return String(s || '').normalize('NFKC').replace(/\s+/g, ''); }
-function ngWordIn(text) {
-  const t = norm(text);
-  return NG_DESC_WORDS.find((w) => t.includes(norm(w))) || null;
-}
 function yen(n) { return '¥' + Number(n || 0).toLocaleString('ja-JP'); }
 
 // 別のAPIの処理を、この中からそのまま呼ぶ（画面と同じ条件で絞った結果を使うため）

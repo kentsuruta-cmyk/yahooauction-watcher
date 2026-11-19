@@ -666,7 +666,7 @@ function buildVerdictBtns(items) {
   });
   var defs = [
     ['hideNg', '◎△（×を隠す） ' + (items.length - c.ng)],
-    ['ok', '◎ 画面点灯 ' + c.ok],
+    ['ok', '◎ 画面点灯・SP ' + c.ok],
     ['maybe', '△ 動作記載のみ ' + c.maybe],
     ['ng', '× 除外 ' + c.ng],
     ['pending', '未判定 ' + c.pending],
@@ -700,7 +700,9 @@ function photoCell(r, i) {
   var html = img
     ? '<img class="photo" loading="lazy" src="' + escapeText(thumbUrl(img, 360)) + '" onclick="openLightbox(' + i + ')" title="クリックで全写真を拡大">'
     : '<div class="photo-empty">写真なし</div>';
-  html += '<span class="v-badge ' + v.cls + '">' + v.mark + ' ' + v.label + '</span>';
+  // GBA SP は写真ではなく「基板なしの記載が無い」ことで ◎ にしている
+  var label = (r.verdict === 'ok' && /^SP：/.test(r.reason || '')) ? 'SP 基板なし記載なし' : v.label;
+  html += '<span class="v-badge ' + v.cls + '">' + v.mark + ' ' + label + '</span>';
   if (r.burnSuspect) html += '<span class="v-badge v-burn">⚠ヤケ疑い</span>';
   var note = [r.reason, r.comment].filter(Boolean).join('／');
   if (note) html += '<div class="v-note">' + escapeText(note) + '</div>';
