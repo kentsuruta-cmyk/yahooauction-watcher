@@ -143,7 +143,23 @@ const PROMPT = `あなたは中古の携帯ゲーム機（ゲームボーイ、D
 - burn_suspect: 点いている画面に、焼き付き・黄ばみ・ムラ・ドット抜け・液晶漏れの疑いが見えれば true（判断できなければ false）。
 - comment: 日本語で30文字以内の短い所見。
 
-JSONだけを返してください。例: {"screen_on_index": 2, "screen_dead": false, "cracked": false, "burn_suspect": false, "comment": "3枚目で起動画面が映っている"}`;
+結果は report ツールで報告してください。`;
+
+const REPORT_TOOL = {
+  name: 'report',
+  description: '写真の判定結果を報告する',
+  input_schema: {
+    type: 'object',
+    properties: {
+      screen_on_index: { type: ['integer', 'null'], description: '画面が点いている写真の番号（0始まり）。無ければ null' },
+      screen_dead: { type: 'boolean' },
+      cracked: { type: 'boolean' },
+      burn_suspect: { type: 'boolean' },
+      comment: { type: 'string', description: '日本語30文字以内の所見' },
+    },
+    required: ['screen_on_index', 'screen_dead', 'cracked', 'burn_suspect', 'comment'],
+  },
+};
 
 async function askAi(images) {
   const content = [];
@@ -159,13 +175,24 @@ async function askAi(images) {
       'anthropic-version': '2023-06-01',
       'content-type': 'application/json',
     },
-    body: JSON.stringify({ model: ANTHROPIC_MODEL, max_tokens: 300, messages: [{ role: 'user', content }] }),
+    // 返事の形を固定するため、「report」という道具（ツール）を必ず使って答えさせる。
+    // 文章で答えさせると、前置きが付いたり途中で切れたりして JSON として読めないことがあった（2026-11-19）
+    body: JSON.stringify({
+      model: ANTHROPIC_MODEL,
+      max_tokens: 800,
+      tools: [REPORT_TOOL],
+      tool_choice: { type: 'tool', name: 'report' },
+      messages: [{ role: 'user', content }],
+    }),
   });
   const body = await res.json().catch(() => null);
   if (!res.ok) throw new Error(`AI ${res.status}: ${body && body.error ? body.error.message : ''}`);
+  const use = (body.content || []).find((c) => c.type === 'tool_use' && c.name === 'report');
+  if (use && use.input) return use.input;
+  // 念のため、文章で返ってきた場合も読めるようにしておく
   const text = (body.content || []).map((c) => c.text || '').join('');
   const m = text.match(/\{[\s\S]*\}/);
-  if (!m) throw new Error('AIの返事がJSONではありません');
+  if (!m) throw new Error(`AIの返事を読めません（${body.stop_reason || ''}: ${text.slice(0, 60)}）`);
   return JSON.parse(m[0]);
 }
 
