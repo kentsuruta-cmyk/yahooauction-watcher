@@ -279,12 +279,23 @@ async function inspectOne({ link, model, title }) {
   return Object.assign(out, { verdict: 'ng', reason: '画面点灯の写真も動作の記載もなし' });
 }
 
+// v1 → v2 で変わったのは GBA SP の判定だけ。それ以外の機種は v1 の結果をそのまま使い、
+// 商品ページを読み直さない（全件を読み直すとヤフオクに断られるため）
+const OLD_CACHE_PREFIX = 'inspect:v1:';
+
 async function inspectCached(item, fresh) {
   const key = CACHE_PREFIX + idOf(item.link);
   if (!fresh) {
     try {
       const hit = await redisCommand('GET', key);
       if (hit) return Object.assign(JSON.parse(hit), { cached: true });
+      if (item.model !== 'ゲームボーイアドバンスSP') {
+        const old = await redisCommand('GET', OLD_CACHE_PREFIX + idOf(item.link));
+        if (old && JSON.parse(old).by !== 'error') {
+          await redisCommand('SET', key, old, 'EX', CACHE_TTL_SEC);
+          return Object.assign(JSON.parse(old), { cached: true });
+        }
+      }
     } catch (e) { /* 保存先が使えなくても判定は続ける */ }
   }
   let result;
@@ -316,10 +327,10 @@ module.exports = async (req, res) => {
       fresh = q.fresh === '1';
     }
     items = items.filter((i) => i && i.link).slice(0, MAX_ITEMS_PER_CALL);
-    // 同時に読みに行くのは3件まで（ヤフオクに断られないように）
+    // 同時に読みに行くのは2件まで（ヤフオクに断られないように）
     const results = new Array(items.length);
     let next = 0;
-    await Promise.all([0, 1, 2].map(async () => {
+    await Promise.all([0, 1].map(async () => {
       while (next < items.length) {
         const n = next++;
         results[n] = await inspectCached(items[n], fresh);
