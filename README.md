@@ -14,10 +14,33 @@ DS / DS Lite / DSi / DSi LL / 3DS / 3DS LL / PSP 1000・2000・3000）を監視�
 | `api/mercari.js` | メルカリ検索（内部API + DPoP） |
 | `api/checked.js` | チェック済みの保存（Upstash Redis） |
 | `api/watch.js` | メルカリのオークション終了通知リストの登録・解除 |
+| `api/inspect.js` | 出品の写真と説明文をAIで判定（◎画面点灯あり / △動作記載のみ / ×除外） |
 | `api/sp-alert.js` | GBA SP の新着（説明文に基盤なしが無いもの）を LINE に通知 |
 | `api/watch-check.js` | 監視中オークションの確認と通知（GitHub Actions から5分おき） |
 | `lib/mercari-client.js` | メルカリ内部APIの共通クライアント（DPoP・商品取得） |
 | `lib/watch-store.js` | 通知リストの保存先（Upstash Redis） |
+
+## 写真のAI判定（◎ / △ / ×）
+
+一覧を取ると、画面が自動で `/api/inspect` に8件ずつ送り、出品ごとに判定する。結果は Redis
+（`inspect:v1:<出品ID>`）に14日間保存し、同じ出品は二度判定しない。
+
+| 判定 | 条件 |
+| --- | --- |
+| ◎ 画面点灯あり | 画面が点いている写真がある。一覧にその写真を出すので、ヤケだけ目で確認する（AIがヤケっぽいと見たら ⚠ を付ける） |
+| △ 動作記載のみ | 電源オフの写真しかないが、タイトル・説明文に「動作品」「動作確認済」などがある |
+| × 除外 | 説明文に「電源入らず」「液晶不良」「動作未確認」など／写真で画面割れ・液晶死に／点灯写真も動作の記載もない |
+
+- **GBA / GBA SP は × にしない**（ジャンクも仕入れ対象のため。◎ か △）
+- 初期表示は「×を隠す」。AIの見落としがないか、× のボタンでときどき確認する
+- 写真をクリックすると全写真を拡大表示（点灯している写真が先頭・緑枠）
+- キーワードは `api/inspect.js` の `NG_TEXT_WORDS` / `WORKING_TEXT_WORDS` で調整する
+- 1件だけ試す：`/api/inspect?link=<出品URL>&model=DS%20Lite&fresh=1`
+
+| 変数（Vercel） | 用途 |
+| --- | --- |
+| `ANTHROPIC_API_KEY` | 必須。未設定だとキーワード判定だけになり、残りは「未判定」になる |
+| `ANTHROPIC_MODEL` | 任意。既定は `claude-haiku-5-5` |
 
 ## GBA SP の新着通知（LINE）
 

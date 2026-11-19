@@ -1,0 +1,268 @@
+// 出品の「写真と説明文」を見て、仕入れ候補として見る価値があるかを判定する。
+//
+//   ◎ ok     … 画面が点いている写真がある（ヤケだけ目で確認すればいい）
+//   △ maybe  … 電源オフの写真しかないが、タイトル・説明文に「動作品」などの記載がある
+//   × ng     … 画面が真っ黒・割れ・「電源入らず」などの記載、または動作の根拠が何もない
+//   ? unknown… 判定できなかった（写真が取れない・AIの設定が無いなど）
+//
+// GBA / GBA SP はジャンクも仕入れ対象なので、× にはしない（◎ か △ のどちらか）。
+//
+// 1. 説明文とタイトルのキーワードで先にふるう（無料）
+// 2. 残ったものだけ、写真を AI（Claude）に見せて判定する
+// 3. 結果は Redis に14日間保存し、同じ出品は二度判定しない
+//
+//   POST /api/inspect  { items: [{ link, model, title }] }  … 1回8件まで
+//   GET  /api/inspect?link=...&model=...&title=...&fresh=1 … 1件だけ（動作確認用。fresh=1 で保存を無視）
+const { fetchItem } = require('../lib/mercari-client');
+const { redisCommand } = require('../lib/watch-store');
+
+const ANTHROPIC_API_KEY = process.env.ANTHROPIC_API_KEY;
+const ANTHROPIC_MODEL = process.env.ANTHROPIC_MODEL || 'claude-haiku-5-5';
+const CACHE_PREFIX = 'inspect:v1:';
+const CACHE_TTL_SEC = 14 * 24 * 60 * 60;
+const MAX_ITEMS_PER_CALL = 8;
+const MAX_IMAGES = 6; // AIに見せる写真の枚数（先頭から）
+
+// ジャンクでも仕入れる機種（× にしない）
+const JUNK_OK_MODELS = ['ゲームボーイアドバンス', 'ゲームボーイアドバンスSP'];
+
+// 説明文・タイトルにあれば ×（JUNK_OK_MODELS 以外）。表記ゆれは norm() で吸収する
+const NG_TEXT_WORDS = [
+  '電源入らず', '電源が入らない', '電源入りません', '電源が入りません', '通電しない', '通電しません', '通電せず',
+  '起動しない', '起動しません', '起動せず', '画面が映らない', '画面映らない', '映りません', '画面が映りません',
+  '液晶不良', '液晶割れ', '画面割れ', '液晶漏れ', '液晶にドット抜け多数', '画面が真っ暗', '画面真っ暗',
+  // ※「ジャンク」単体は入れない（説明文の「ジャンク扱いではありません」まで弾いてしまうため。タイトルは検索側で除外済み）
+  '動作未確認', '通電未確認', '動作不良', '不動品', '故障品', '部品取り',
+];
+// 説明文・タイトルにあれば「動作する」と書いてある扱い（電源オフの写真しかなくても △ にする）
+const WORKING_TEXT_WORDS = [
+  '動作品', '動作確認済', '動作確認しました', '動作確認ずみ', '完動品', '動作良好', '動作問題なし',
+  '動作に問題なし', '動作に問題ありません', '動作に問題はありません', '動作は問題ありません',
+  '動作OK', '起動確認済', '起動確認しました', '通電確認済', '通電・動作確認', 'ソフト起動確認',
+];
+
+const UA = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/120.0.0.0 Safari/537.36';
+
+function norm(s) { return String(s || '').normalize('NFKC').replace(/\s+/g, '').toLowerCase(); }
+function findWord(text, words) {
+  const t = norm(text);
+  return words.find((w) => t.includes(norm(w))) || null;
+}
+function workingWordIn(text) {
+  return findWord(text, WORKING_TEXT_WORDS);
+}
+
+function idOf(link) {
+  const m = String(link).match(/\/(?:auction|item|shops\/product)\/([A-Za-z0-9]+)/);
+  return m ? m[1] : String(link);
+}
+
+// ── 商品ページから写真と説明文を取る ─────────────────────────────
+
+function nextData(html) {
+  const m = html.match(/<script id="__NEXT_DATA__"[^>]*>([\s\S]*?)<\/script>/);
+  if (!m) return null;
+  try { return JSON.parse(m[1]); } catch (e) { return null; }
+}
+
+// 商品ページの __NEXT_DATA__ の中身（2026-11-19 にブラウザで確認）:
+//   ヤフオク     props.pageProps.initialState.item.detail.item.img[].image / .description（文字列の配列）
+//   Yahoo!フリマ props.initialState.itemsState.items.item.images[].url / .description（文字列）
+async function fetchYahoo(link) {
+  const res = await fetch(link, { headers: { 'User-Agent': UA, 'Accept-Language': 'ja,en;q=0.9' } });
+  if (res.status === 404) return { ended: true };
+  if (!res.ok) throw new Error(`商品ページが HTTP ${res.status}`);
+  const html = await res.text();
+  const data = nextData(html);
+  let images = [];
+  let description = '';
+  let condition = '';
+  if (data) {
+    const ps = data.props || {};
+    const auc = (((ps.pageProps || {}).initialState || ps.initialState || {}).item || {}).detail;
+    const it = auc && auc.item;
+    if (it) {
+      images = (it.img || []).map((x) => x && x.image).filter(Boolean);
+      description = Array.isArray(it.description) ? it.description.join('\n') : String(it.description || '');
+      condition = it.conditionName || '';
+    }
+    const flea = (((ps.initialState || (ps.pageProps || {}).initialState || {}).itemsState || {}).items || {}).item;
+    if (!images.length && flea) {
+      images = (flea.images || []).map((x) => x && x.url).filter(Boolean);
+      description = String(flea.description || '');
+    }
+  }
+  // 構造が変わっても止まらないよう、最後の手段として画像URLを文字列から拾う
+  if (!images.length) {
+    images = [...new Set(html.match(/https:\/\/auctions\.c\.yimg\.jp\/images\.auctions\.yahoo\.co\.jp\/image\/[^"'\s\\?]+?\.(?:jpg|jpeg|png)/gi) || [])];
+  }
+  return { images, description, condition };
+}
+
+async function fetchMercari(link) {
+  if (/\/shops\/product\//.test(link)) throw new Error('メルカリShopsの出品は未対応');
+  const item = await fetchItem(idOf(link));
+  if (item.status && item.status !== 'on_sale') return { ended: true };
+  const images = (item.photos || item.thumbnails || []).map((p) => (typeof p === 'string' ? p : p && (p.url || p.uri))).filter(Boolean);
+  return { images, description: String(item.description || ''), condition: (item.item_condition || {}).name || '' };
+}
+
+// ヤフオクの写真は縮小サーバー経由で取る（AIに送るデータ量とコストを抑える）
+function smallUrl(url) {
+  if (/^https:\/\/auctions\.c\.yimg\.jp\//.test(url)) {
+    return 'https://auc-pctr.c.yimg.jp/i/' + url.replace(/^https:\/\//, '') + '?pri=l&w=640&h=640&up=0';
+  }
+  return url;
+}
+
+async function loadImage(url) {
+  for (const u of [smallUrl(url), url]) {
+    try {
+      const res = await fetch(u, { headers: { 'User-Agent': UA, Referer: 'https://auctions.yahoo.co.jp/' } });
+      if (!res.ok) continue;
+      let type = (res.headers.get('content-type') || '').split(';')[0].trim();
+      if (!/^image\/(jpeg|png|gif|webp)$/.test(type)) type = 'image/jpeg';
+      const buf = Buffer.from(await res.arrayBuffer());
+      if (buf.length < 500 || buf.length > 4.5 * 1024 * 1024) continue;
+      return { type, data: buf.toString('base64') };
+    } catch (e) { /* 次の候補へ */ }
+  }
+  return null;
+}
+
+// ── AI に写真を見せる ─────────────────────────────────────────
+
+const PROMPT = `あなたは中古の携帯ゲーム機（ゲームボーイ、DS、3DS、PSPなど）の仕入れ担当です。
+オークションの出品写真が順番に（0番から）並んでいます。写真だけを見て、次の点を判定してください。
+
+- screen_on_index: 本体の液晶画面に電源が入って映像（起動画面・ゲーム画面・メニューなど）が表示されている写真の番号。
+  最もはっきり画面が見える1枚を選ぶ。無ければ null。画面に照明や景色が反射しているだけのものは「点いている」に含めない。
+- screen_dead: 電源が入っている様子（電源ランプ点灯など）なのに画面が真っ黒・真っ白・縦線だらけ等で、液晶が壊れていそうなら true。
+  単に電源オフで撮っているだけなら false。
+- cracked: 液晶や画面カバーにはっきりした割れ・ヒビが写っていれば true。
+- burn_suspect: 点いている画面に、焼き付き・黄ばみ・ムラ・ドット抜け・液晶漏れの疑いが見えれば true（判断できなければ false）。
+- comment: 日本語で30文字以内の短い所見。
+
+JSONだけを返してください。例: {"screen_on_index": 2, "screen_dead": false, "cracked": false, "burn_suspect": false, "comment": "3枚目で起動画面が映っている"}`;
+
+async function askAi(images) {
+  const content = [];
+  images.forEach((img, i) => {
+    content.push({ type: 'text', text: `写真${i}:` });
+    content.push({ type: 'image', source: { type: 'base64', media_type: img.type, data: img.data } });
+  });
+  content.push({ type: 'text', text: PROMPT });
+  const res = await fetch('https://api.anthropic.com/v1/messages', {
+    method: 'POST',
+    headers: {
+      'x-api-key': ANTHROPIC_API_KEY,
+      'anthropic-version': '2023-06-01',
+      'content-type': 'application/json',
+    },
+    body: JSON.stringify({ model: ANTHROPIC_MODEL, max_tokens: 300, messages: [{ role: 'user', content }] }),
+  });
+  const body = await res.json().catch(() => null);
+  if (!res.ok) throw new Error(`AI ${res.status}: ${body && body.error ? body.error.message : ''}`);
+  const text = (body.content || []).map((c) => c.text || '').join('');
+  const m = text.match(/\{[\s\S]*\}/);
+  if (!m) throw new Error('AIの返事がJSONではありません');
+  return JSON.parse(m[0]);
+}
+
+// ── 1件の判定 ──────────────────────────────────────────────
+
+async function inspectOne({ link, model, title }) {
+  const junkOk = JUNK_OK_MODELS.includes(model);
+  const isMercari = /mercari\.com/.test(link);
+  const page = isMercari ? await fetchMercari(link) : await fetchYahoo(link);
+  if (page.ended) return { verdict: 'ng', reason: '終了・売り切れ', ended: true };
+
+  const text = `${title || ''}\n${page.description || ''}`;
+  const images = (page.images || []).slice(0, MAX_IMAGES);
+  const base = { images, firstImage: images[0] || null };
+  const working = workingWordIn(text);
+
+  // 1. キーワードで × （GBA / GBA SP は除く）
+  if (!junkOk) {
+    const ng = findWord(text, NG_TEXT_WORDS);
+    if (ng) return Object.assign(base, { verdict: 'ng', reason: `説明文に「${ng}」`, by: 'text' });
+  }
+
+  // 2. 写真を AI に見せる
+  if (!ANTHROPIC_API_KEY) {
+    return Object.assign(base, { verdict: 'unknown', reason: 'AI未設定（ANTHROPIC_API_KEY）', by: 'none', noCache: true });
+  }
+  if (!images.length) {
+    return Object.assign(base, { verdict: working ? 'maybe' : (junkOk ? 'maybe' : 'ng'), reason: '写真なし', by: 'text' });
+  }
+  const loaded = (await Promise.all(images.map(loadImage)));
+  const usable = [];
+  loaded.forEach((img, i) => { if (img) usable.push({ img, src: images[i] }); });
+  if (!usable.length) {
+    return Object.assign(base, { verdict: 'unknown', reason: '写真を読み込めませんでした', by: 'none', noCache: true });
+  }
+  const ai = await askAi(usable.map((u) => u.img));
+  const idx = Number.isInteger(ai.screen_on_index) && usable[ai.screen_on_index] ? ai.screen_on_index : null;
+  const screenImage = idx !== null ? usable[idx].src : null;
+  const out = Object.assign(base, {
+    by: 'ai',
+    screenImage,
+    burnSuspect: !!ai.burn_suspect,
+    comment: String(ai.comment || '').slice(0, 60),
+  });
+
+  if (ai.cracked && !junkOk) return Object.assign(out, { verdict: 'ng', reason: '画面割れの疑い' });
+  if (ai.screen_dead && !junkOk) return Object.assign(out, { verdict: 'ng', reason: '液晶が死んでいる疑い' });
+  if (screenImage) return Object.assign(out, { verdict: 'ok', reason: '画面点灯の写真あり' });
+  if (working) return Object.assign(out, { verdict: 'maybe', reason: `電源オフの写真のみ（「${working}」の記載あり）` });
+  if (junkOk) return Object.assign(out, { verdict: 'maybe', reason: '電源オフの写真のみ（GBA系なので残す）' });
+  return Object.assign(out, { verdict: 'ng', reason: '画面点灯の写真も動作の記載もなし' });
+}
+
+async function inspectCached(item, fresh) {
+  const key = CACHE_PREFIX + idOf(item.link);
+  if (!fresh) {
+    try {
+      const hit = await redisCommand('GET', key);
+      if (hit) return Object.assign(JSON.parse(hit), { cached: true });
+    } catch (e) { /* 保存先が使えなくても判定は続ける */ }
+  }
+  let result;
+  try {
+    result = await inspectOne(item);
+  } catch (e) {
+    return { verdict: 'unknown', reason: `判定エラー: ${e.message}`, by: 'error' };
+  }
+  result.at = Date.now();
+  if (!result.noCache) {
+    try { await redisCommand('SET', key, JSON.stringify(result), 'EX', CACHE_TTL_SEC); } catch (e) { /* 無視 */ }
+  }
+  return result;
+}
+
+module.exports = async (req, res) => {
+  res.setHeader('Access-Control-Allow-Origin', '*');
+  res.setHeader('Cache-Control', 'no-store, max-age=0');
+  try {
+    let items;
+    let fresh = false;
+    if (req.method === 'POST') {
+      const body = typeof req.body === 'string' ? JSON.parse(req.body || '{}') : (req.body || {});
+      items = Array.isArray(body.items) ? body.items : [];
+    } else {
+      const q = req.query || {};
+      if (!q.link) return res.status(400).json({ error: 'link required' });
+      items = [{ link: q.link, model: q.model || '', title: q.title || '' }];
+      fresh = q.fresh === '1';
+    }
+    items = items.filter((i) => i && i.link).slice(0, MAX_ITEMS_PER_CALL);
+    const results = await Promise.all(items.map((i) => inspectCached(i, fresh)));
+    const out = {};
+    items.forEach((i, n) => { out[idOf(i.link)] = results[n]; });
+    return res.status(200).json({ results: out, aiConfigured: !!ANTHROPIC_API_KEY, model: ANTHROPIC_MODEL });
+  } catch (e) {
+    return res.status(500).json({ error: e.message });
+  }
+};
+
+module.exports._test = { findWord, workingWordIn, idOf, smallUrl, NG_TEXT_WORDS };

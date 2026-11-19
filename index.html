@@ -57,6 +57,29 @@ td a:hover { text-decoration: underline; }
 .watch-btn:hover { border-color: #0066cc; color: #0066cc; }
 .watch-btn.on { background: #0066cc; border-color: #0066cc; color: #fff; }
 .watch-count { color: #0066cc; font-size: 11px; }
+/* AI判定（写真チェック） */
+.verdict-row { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; margin-bottom: 12px; }
+.verdict-btn { background: #fff; border: 1px solid #ddd; color: #555; padding: 5px 12px; border-radius: 14px; cursor: pointer; font-size: 12px; font-family: 'Courier New', monospace; }
+.verdict-btn.active { background: #111; border-color: #111; color: #fff; font-weight: bold; }
+.inspect-status { color: #888; font-size: 11px; }
+.v-badge { font-size: 11px; padding: 2px 8px; border-radius: 3px; font-weight: bold; display: inline-block; white-space: nowrap; }
+.v-ok { background: #00aa55; color: #fff; }
+.v-maybe { background: #f0ad00; color: #fff; }
+.v-ng { background: #999; color: #fff; }
+.v-unknown { background: #eee; color: #888; }
+.v-burn { background: #fff3cd; color: #856404; margin-left: 4px; }
+.v-note { color: #888; font-size: 10px; margin-top: 3px; max-width: 170px; line-height: 1.4; }
+.photo { width: 170px; height: 128px; object-fit: contain; background: #111; border-radius: 4px; cursor: zoom-in; display: block; margin-bottom: 4px; }
+.photo-empty { width: 170px; height: 40px; display: flex; align-items: center; justify-content: center; color: #bbb; font-size: 11px; border: 1px dashed #ddd; border-radius: 4px; margin-bottom: 4px; }
+tr.verdict-ng td { opacity: 0.55; }
+#lightbox { position: fixed; inset: 0; background: rgba(0,0,0,0.88); display: none; z-index: 100; overflow-y: auto; padding: 30px 20px; }
+#lightbox.open { display: block; }
+#lightbox .lb-head { color: #fff; max-width: 1000px; margin: 0 auto 14px; font-size: 13px; display: flex; justify-content: space-between; gap: 12px; }
+#lightbox .lb-head a { color: #ff6b8b; }
+#lightbox .lb-close { background: #fff; border: none; border-radius: 4px; padding: 6px 14px; cursor: pointer; font-family: 'Courier New', monospace; }
+#lightbox .lb-imgs { max-width: 1000px; margin: 0 auto; display: flex; flex-direction: column; gap: 14px; align-items: center; }
+#lightbox .lb-imgs img { max-width: 100%; max-height: 85vh; border-radius: 4px; }
+#lightbox .lb-imgs .lb-screen { outline: 4px solid #00aa55; }
 </style>
 </head>
 <body>
@@ -90,12 +113,14 @@ td a:hover { text-decoration: underline; }
 <button class="clear-btn" onclick="clearChecked()">チェックをリセット</button>
 </div>
 </div>
+<div class="verdict-row" id="verdictBtns"></div>
 <p class="note" id="resultNote">※価格はヤフオク表示価格です。</p>
 <p class="note" id="refreshNote"></p>
 <div id="progressLog"></div>
 <div id="resultsBody"></div>
 </div>
 </div>
+<div id="lightbox" onclick="if(event.target===this)closeLightbox()"></div>
 <script>
 let allItems = [];
 let currentFilter = 'all';
@@ -177,6 +202,7 @@ async function switchTab(name) {
     buildFilterBtns();
     renderTable(allItems);
     updateRefreshNote();
+    runInspect();
     // 前に取得してから時間がたっていれば、すぐ取り直す
     autoRefresh();
   } else {
@@ -331,7 +357,9 @@ function buildFilterBtns() {
 
 function renderTable(items) {
   var modelFiltered = currentFilter === 'all' ? items : items.filter(function(i) { return i.model === currentFilter; });
-  var filtered = hideChecked ? modelFiltered.filter(function(i) { return !checkedIds.has(getAuctionId(i.link)); }) : modelFiltered;
+  var checkFiltered = hideChecked ? modelFiltered.filter(function(i) { return !checkedIds.has(getAuctionId(i.link)); }) : modelFiltered;
+  buildVerdictBtns(checkFiltered);
+  var filtered = checkFiltered.filter(matchVerdict);
 
   var hiddenCount = modelFiltered.length - filtered.length;
   var countText = filtered.length + ' 件表示 / 全' + items.length + '件';
@@ -364,8 +392,10 @@ function renderTable(items) {
       ? remainText(deadline) + '<div class="cond">終了予定 ' + endText(deadline) + '</div>'
       : (item.endTime || '不明');
 
-    rows += '<tr class="' + (checked ? 'checked' : '') + '" id="row' + i + '">' +
+    var insp = inspectMap[auctionId];
+    rows += '<tr class="' + (checked ? 'checked' : '') + (insp && insp.verdict === 'ng' ? ' verdict-ng' : '') + '" id="row' + i + '">' +
       '<td><button class="check-btn ' + (checked ? 'on' : '') + '" onclick="doCheck(\'' + encodedId + '\',' + i + ')">' + (checked ? '✓' : '') + '</button></td>' +
+      '<td>' + photoCell(insp, i) + '</td>' +
       '<td>' + item.model + '</td>' +
       '<td><a href="' + item.link + '" target="_blank">' + item.title + '</a></td>' +
       '<td>' + getBadge(item.status) + ' ' + getTypeBadge(item) +
@@ -379,7 +409,7 @@ function renderTable(items) {
   }
 
   document.getElementById('resultsBody').innerHTML =
-    '<table><thead><tr><th></th><th>機種</th><th>商品名</th><th>状態</th><th>価格</th><th>送料</th><th>合計</th><th>' + source().timeHeader + '</th>' +
+    '<table><thead><tr><th></th><th>写真・AI判定</th><th>機種</th><th>商品名</th><th>状態</th><th>価格</th><th>送料</th><th>合計</th><th>' + source().timeHeader + '</th>' +
     (isMercari ? '<th>終了通知</th>' : '') + '</tr></thead><tbody>' + rows + '</tbody></table>';
 
   updateWatchCount();
@@ -545,6 +575,7 @@ async function startSearch() {
     buildFilterBtns();
     renderTable(allItems);
     updateRefreshNote();
+    runInspect();
   } catch (e) {
     // 原因（ページ構造の変更・ブロック・時間切れなど）をそのまま見せる
     document.getElementById('progressLog').innerHTML = '<div class="status" style="color:#e0003c;">エラーが発生しました: ' +
@@ -575,6 +606,7 @@ async function autoRefresh() {
     if (currentFilter !== 'all' && !allItems.some(function(i) { return i.model === currentFilter; })) currentFilter = 'all';
     buildFilterBtns();
     renderTable(allItems);
+    runInspect();
   }
   updateRefreshNote(failed);
 }
@@ -590,6 +622,155 @@ function tick() {
   }
   renderTable(allItems);
   autoRefresh();
+}
+
+// ── AIによる写真チェック ─────────────────────────────────────────
+// 一覧を取ったら、まだ判定していない出品を /api/inspect に8件ずつ送って判定してもらう。
+// 結果はサーバー側にも14日間保存されるので、同じ出品は二度判定しない（＝費用もかからない）。
+var inspectMap = {};          // 出品ID → 判定結果
+var inspectQueued = {};       // 送信済み（判定待ち）の出品ID
+var inspectRunning = false;
+var inspectProgress = { done: 0, total: 0 };
+var inspectAiConfigured = true;
+// 初期表示は「×を隠す」。間違いがないか × のタブもときどき見る
+var verdictFilter = 'hideNg';
+
+var VERDICTS = {
+  ok: { mark: '◎', label: '画面点灯あり', cls: 'v-ok' },
+  maybe: { mark: '△', label: '動作記載のみ', cls: 'v-maybe' },
+  ng: { mark: '×', label: '除外', cls: 'v-ng' },
+  unknown: { mark: '?', label: '判定できず', cls: 'v-unknown' },
+};
+
+function verdictOf(item) {
+  var r = inspectMap[getAuctionId(item.link)];
+  return r ? r.verdict : 'pending';
+}
+
+function matchVerdict(item) {
+  var v = verdictOf(item);
+  if (verdictFilter === 'all') return true;
+  if (verdictFilter === 'hideNg') return v !== 'ng';
+  if (verdictFilter === 'pending') return v === 'pending' || v === 'unknown';
+  return v === verdictFilter;
+}
+
+function buildVerdictBtns(items) {
+  var c = { ok: 0, maybe: 0, ng: 0, pending: 0 };
+  items.forEach(function(i) {
+    var v = verdictOf(i);
+    if (v === 'unknown') v = 'pending';
+    c[v] = (c[v] || 0) + 1;
+  });
+  var defs = [
+    ['hideNg', '◎△（×を隠す） ' + (items.length - c.ng)],
+    ['ok', '◎ 画面点灯 ' + c.ok],
+    ['maybe', '△ 動作記載のみ ' + c.maybe],
+    ['ng', '× 除外 ' + c.ng],
+    ['pending', '未判定 ' + c.pending],
+    ['all', 'すべて ' + items.length],
+  ];
+  var status = '';
+  if (!inspectAiConfigured) status = '⚠ AIが未設定のため、写真の判定はしていません（Vercel に ANTHROPIC_API_KEY を設定）';
+  else if (inspectRunning) status = '🔎 AIが写真を確認中… ' + inspectProgress.done + ' / ' + inspectProgress.total;
+  document.getElementById('verdictBtns').innerHTML = defs.map(function(d) {
+    return '<button class="verdict-btn' + (verdictFilter === d[0] ? ' active' : '') + '" onclick="setVerdictFilter(\'' + d[0] + '\')">' + d[1] + '</button>';
+  }).join('') + '<span class="inspect-status">' + escapeText(status) + '</span>';
+}
+
+function setVerdictFilter(v) {
+  verdictFilter = v;
+  renderTable(allItems);
+}
+
+// ヤフオクの写真は縮小版を表示する（一覧が重くならないように）
+function thumbUrl(url, size) {
+  if (/^https:\/\/auctions\.c\.yimg\.jp\//.test(url)) {
+    return 'https://auc-pctr.c.yimg.jp/i/' + url.replace(/^https:\/\//, '') + '?pri=l&w=' + size + '&h=' + size + '&up=0';
+  }
+  return url;
+}
+
+function photoCell(r, i) {
+  if (!r) return '<div class="photo-empty">判定待ち…</div>';
+  var v = VERDICTS[r.verdict] || VERDICTS.unknown;
+  var img = r.screenImage || r.firstImage;
+  var html = img
+    ? '<img class="photo" loading="lazy" src="' + escapeText(thumbUrl(img, 360)) + '" onclick="openLightbox(' + i + ')" title="クリックで全写真を拡大">'
+    : '<div class="photo-empty">写真なし</div>';
+  html += '<span class="v-badge ' + v.cls + '">' + v.mark + ' ' + v.label + '</span>';
+  if (r.burnSuspect) html += '<span class="v-badge v-burn">⚠ヤケ疑い</span>';
+  var note = [r.reason, r.comment].filter(Boolean).join('／');
+  if (note) html += '<div class="v-note">' + escapeText(note) + '</div>';
+  return html;
+}
+
+function openLightbox(i) {
+  var item = renderedItems[i];
+  if (!item) return;
+  var r = inspectMap[getAuctionId(item.link)] || {};
+  var imgs = (r.images || []).slice();
+  // 画面が点いている写真を先頭に
+  if (r.screenImage) imgs = [r.screenImage].concat(imgs.filter(function(u) { return u !== r.screenImage; }));
+  var box = document.getElementById('lightbox');
+  box.innerHTML = '<div class="lb-head"><div><a href="' + escapeText(item.link) + '" target="_blank">' + escapeText(item.title) + '</a>' +
+    '<div style="color:#bbb;margin-top:4px;">' + escapeText([r.reason, r.comment].filter(Boolean).join('／')) + '</div></div>' +
+    '<button class="lb-close" onclick="closeLightbox()">閉じる ✕</button></div>' +
+    '<div class="lb-imgs">' + imgs.map(function(u) {
+      return '<img src="' + escapeText(thumbUrl(u, 1200)) + '"' + (u === r.screenImage ? ' class="lb-screen"' : '') + '>';
+    }).join('') + '</div>';
+  box.classList.add('open');
+  box.scrollTop = 0;
+}
+
+function closeLightbox() {
+  document.getElementById('lightbox').classList.remove('open');
+}
+document.addEventListener('keydown', function(e) { if (e.key === 'Escape') closeLightbox(); });
+
+async function runInspect() {
+  if (inspectRunning) return;
+  inspectRunning = true;
+  try {
+    while (true) {
+      var name = currentSource;
+      var todo = allItems.filter(function(it) {
+        var id = getAuctionId(it.link);
+        return !inspectMap[id] && !inspectQueued[id];
+      });
+      if (!todo.length) break;
+      inspectProgress.total = inspectProgress.done + todo.length;
+      // 8件ずつ、同時に2回まで送る
+      var batches = [];
+      for (var i = 0; i < todo.length && batches.length < 2; i += 8) batches.push(todo.slice(i, i + 8));
+      await Promise.all(batches.map(async function(batch) {
+        batch.forEach(function(it) { inspectQueued[getAuctionId(it.link)] = true; });
+        try {
+          var res = await fetch('/api/inspect', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ items: batch.map(function(it) { return { link: it.link, model: it.model, title: it.title }; }) }),
+          });
+          var data = await res.json();
+          if (data.aiConfigured === false) inspectAiConfigured = false;
+          Object.keys(data.results || {}).forEach(function(id) { inspectMap[id] = data.results[id]; });
+        } catch (e) {
+          // 通信エラーは「判定できず」にしておく（次の自動更新では再送しない。再読み込みでやり直し）
+          batch.forEach(function(it) {
+            var id = getAuctionId(it.link);
+            if (!inspectMap[id]) inspectMap[id] = { verdict: 'unknown', reason: '通信エラー' };
+          });
+        }
+        inspectProgress.done += batch.length;
+      }));
+      if (name === currentSource) renderTable(allItems);
+      if (!inspectAiConfigured) break;
+    }
+  } finally {
+    inspectRunning = false;
+    inspectProgress = { done: 0, total: 0 };
+    renderTable(allItems);
+  }
 }
 
 setInterval(tick, TICK_MS);
