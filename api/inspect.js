@@ -68,8 +68,20 @@ function nextData(html) {
 // 商品ページの __NEXT_DATA__ の中身（2026-11-19 にブラウザで確認）:
 //   ヤフオク     props.pageProps.initialState.item.detail.item.img[].image / .description（文字列の配列）
 //   Yahoo!フリマ props.initialState.itemsState.items.item.images[].url / .description（文字列）
+const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+
+// 続けて読みに行くとヤフオクが一時的に HTTP 500 を返す（2026-11-19、16件同時で約4分の1が失敗）。
+// 少し待って2回までやり直す
+async function fetchPage(link) {
+  for (let attempt = 0; ; attempt++) {
+    const res = await fetch(link, { headers: { 'User-Agent': UA, 'Accept-Language': 'ja,en;q=0.9' } });
+    if (res.ok || res.status === 404 || attempt >= 2 || (res.status < 500 && res.status !== 429)) return res;
+    await sleep(1500 * (attempt + 1) + Math.random() * 1000);
+  }
+}
+
 async function fetchYahoo(link) {
-  const res = await fetch(link, { headers: { 'User-Agent': UA, 'Accept-Language': 'ja,en;q=0.9' } });
+  const res = await fetchPage(link);
   if (res.status === 404) return { ended: true };
   if (!res.ok) throw new Error(`商品ページが HTTP ${res.status}`);
   const html = await res.text();
@@ -283,7 +295,15 @@ module.exports = async (req, res) => {
       fresh = q.fresh === '1';
     }
     items = items.filter((i) => i && i.link).slice(0, MAX_ITEMS_PER_CALL);
-    const results = await Promise.all(items.map((i) => inspectCached(i, fresh)));
+    // 同時に読みに行くのは3件まで（ヤフオクに断られないように）
+    const results = new Array(items.length);
+    let next = 0;
+    await Promise.all([0, 1, 2].map(async () => {
+      while (next < items.length) {
+        const n = next++;
+        results[n] = await inspectCached(items[n], fresh);
+      }
+    }));
     const out = {};
     items.forEach((i, n) => { out[idOf(i.link)] = results[n]; });
     return res.status(200).json({ results: out, aiConfigured: !!ANTHROPIC_API_KEY, model: ANTHROPIC_MODEL });

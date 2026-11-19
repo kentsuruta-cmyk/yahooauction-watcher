@@ -632,6 +632,8 @@ var inspectQueued = {};       // 送信済み（判定待ち）の出品ID
 var inspectRunning = false;
 var inspectProgress = { done: 0, total: 0 };
 var inspectAiConfigured = true;
+var inspectTries = {};        // 出品ID → 判定エラーになった回数（3回までやり直す）
+var inspectRetryAt = {};      // 出品ID → この時刻を過ぎたらやり直す
 // 初期表示は「×を隠す」。間違いがないか × のタブもときどき見る
 var verdictFilter = 'hideNg';
 
@@ -734,15 +736,26 @@ async function runInspect() {
   try {
     while (true) {
       var name = currentSource;
+      var now = Date.now();
       var todo = allItems.filter(function(it) {
         var id = getAuctionId(it.link);
-        return !inspectMap[id] && !inspectQueued[id];
+        if (inspectQueued[id]) return false;
+        if (!inspectMap[id]) return true;
+        // 一時的なエラー（ヤフオクに断られた等）は、少し待って3回までやり直す
+        return inspectMap[id].by === 'error' && (inspectTries[id] || 0) < 3 && now >= (inspectRetryAt[id] || 0);
       });
-      if (!todo.length) break;
+      if (!todo.length) {
+        // やり直し待ちが残っていれば、時間をおいてもう一度
+        var waiting = allItems.some(function(it) {
+          var id = getAuctionId(it.link);
+          return inspectMap[id] && inspectMap[id].by === 'error' && (inspectTries[id] || 0) < 3;
+        });
+        if (waiting) setTimeout(runInspect, 65 * 1000);
+        break;
+      }
       inspectProgress.total = inspectProgress.done + todo.length;
-      // 8件ずつ、同時に2回まで送る
-      var batches = [];
-      for (var i = 0; i < todo.length && batches.length < 2; i += 8) batches.push(todo.slice(i, i + 8));
+      // 8件ずつ、1回ずつ送る（ヤフオクに断られないよう、まとめて読みに行かない）
+      var batches = [todo.slice(0, 8)];
       await Promise.all(batches.map(async function(batch) {
         batch.forEach(function(it) { inspectQueued[getAuctionId(it.link)] = true; });
         try {
@@ -753,7 +766,15 @@ async function runInspect() {
           });
           var data = await res.json();
           if (data.aiConfigured === false) inspectAiConfigured = false;
-          Object.keys(data.results || {}).forEach(function(id) { inspectMap[id] = data.results[id]; });
+          Object.keys(data.results || {}).forEach(function(id) {
+            var r = data.results[id];
+            inspectMap[id] = r;
+            delete inspectQueued[id];
+            if (r.by === 'error') {
+              inspectTries[id] = (inspectTries[id] || 0) + 1;
+              inspectRetryAt[id] = Date.now() + 60 * 1000 * inspectTries[id];
+            }
+          });
         } catch (e) {
           // 通信エラーは「判定できず」にしておく（次の自動更新では再送しない。再読み込みでやり直し）
           batch.forEach(function(it) {
