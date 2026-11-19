@@ -146,6 +146,8 @@ const MODELS = [
   },
   {
     name: '3DS LL',
+    // 一時停止中（2026-11-19〜 取引先から3DS LLの注文を止められているため）。再開するときはこの行を消す
+    paused: true,
     categories: [7038, 8882], // 本体(3DS LL) / 本体(New 3DS LL)
     query: '3DS LL 本体 -ジャンク -動作未確認 -通電未確認',
     excludeWords: [],
@@ -397,7 +399,8 @@ module.exports = async (req, res) => {
   const isRaw = query.raw === '1' || query.raw === 'true';
 
   try {
-    let targets = MODELS;
+    // paused: true の機種（一時停止中）は抽出しない
+    let targets = MODELS.filter(m => !m.paused);
     if (modelName) {
       targets = MODELS.filter(m => m.name === modelName);
       if (targets.length === 0) {

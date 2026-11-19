@@ -100,6 +100,8 @@ const MODELS = [
   },
   {
     name: '3DS LL',
+    // 一時停止中（2026-11-19〜 取引先から3DS LLの注文を止められているため）。再開するときはこの行を消す
+    paused: true,
     query: '3DS LL 本体 -ジャンク -動作未確認 -通電未確認',
     excludeWords: [],
     // 総額（落札価格＋送料）で18000円まで
@@ -236,7 +238,7 @@ async function collect(onlyModel) {
   const errors = [];
   const seen = new Set();
   let searches = 0;
-  for (const model of MODELS.filter(m => !onlyModel || m.name === onlyModel)) {
+  for (const model of MODELS.filter(m => !m.paused && (!onlyModel || m.name === onlyModel))) {
     for (const searchType of (model.searchTypes || SEARCH_TYPES)) {
       searches++;
       try {
