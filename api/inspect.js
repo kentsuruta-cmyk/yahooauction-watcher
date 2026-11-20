@@ -5,8 +5,11 @@
 //   × ng     … 画面が真っ黒・割れ・「電源入らず」などの記載、または動作の根拠が何もない
 //   ? unknown… 判定できなかった（写真が取れない・AIの設定が無いなど）
 //
-// GBA はジャンクも仕入れ対象なので、× にはしない（◎ か △ のどちらか）。
-// GBA SP は画面が見えなくても動作未確認でも、「基板なし」などの記載が無ければ ◎（あれば ×）。
+// 機種ごとのルール（2026-11-20 に Kenさんと確認）
+//   GBA SP … 状態が悪くても・画面が点いた写真がなくても・動作未確認でも、「基板なし」系の記載が無ければ ◎（あれば ×）
+//   GBA    … 画面が点いた写真があれば ◎。無くても「動作確認済」などの記載があれば ◎。どちらも無ければ △（× にはしない）
+//   その他 … ジャンクは売れない。状態が「傷や汚れあり」「全体的に状態が悪い」は無条件で ×。
+//            「やや傷や汚れあり」までであっても、ジャンク・動作未確認などの記載があれば ×
 //
 // 1. 説明文とタイトルのキーワードで先にふるう（無料）
 // 2. 残ったものだけ、写真を AI（Claude）に見せて判定する
@@ -20,16 +23,16 @@ const spRules = require('../lib/sp-rules');
 
 const ANTHROPIC_API_KEY = process.env.ANTHROPIC_API_KEY;
 const ANTHROPIC_MODEL = process.env.ANTHROPIC_MODEL || 'claude-haiku-5-5';
-// 判定ルールを変えたら版を上げる（古い判定を使い回さないため）。v2: GBA SP は基板なしの記載が無ければ ◎
-const CACHE_PREFIX = 'inspect:v2:';
+// 判定ルールを変えたら版を上げる（古い判定を使い回さないため）。
+// v2: GBA SP は基板なしの記載が無ければ ◎ ／ v3: GBA は動作確認の記載があれば ◎、その他は状態とジャンク記載で ×
+const CACHE_PREFIX = 'inspect:v3:';
 const CACHE_TTL_SEC = 14 * 24 * 60 * 60;
 const MAX_ITEMS_PER_CALL = 8;
 const MAX_IMAGES = 6; // AIに見せる写真の枚数（先頭から）
 
 // ジャンクでも仕入れる機種（× にしない）
-const JUNK_OK_MODELS = ['ゲームボーイアドバンス', 'ゲームボーイアドバンスSP'];
 
-// 説明文・タイトルにあれば ×（JUNK_OK_MODELS 以外）。表記ゆれは norm() で吸収する
+// GBA・GBA SP 以外の機種で、説明文・タイトルにあれば ×。表記ゆれは norm() で吸収する
 const NG_TEXT_WORDS = [
   '電源入らず', '電源が入らない', '電源入りません', '電源が入りません', '通電しない', '通電しません', '通電せず',
   '起動しない', '起動しません', '起動せず', '画面が映らない', '画面映らない', '映りません', '画面が映りません',
@@ -37,6 +40,22 @@ const NG_TEXT_WORDS = [
   // ※「ジャンク」単体は入れない（説明文の「ジャンク扱いではありません」まで弾いてしまうため。タイトルは検索側で除外済み）
   '動作未確認', '通電未確認', '動作不良', '不動品', '故障品', '部品取り',
 ];
+// その他の機種で、出品の状態がこれなら無条件で ×（「やや傷や汚れあり」は含めない）
+function badCondition(condition) {
+  const c = norm(condition);
+  if (!c) return null;
+  if (c.includes(norm('全体的に状態が悪い'))) return '全体的に状態が悪い';
+  if (c.includes(norm('傷や汚れあり')) && !c.includes(norm('やや傷や汚れあり'))) return '傷や汚れあり';
+  return null;
+}
+
+// 説明文に「ジャンク」があれば ×。ただし「ジャンクではありません」のような打ち消しは除く
+const JUNK_NEGATION = /ジャンク(?:品|扱い)?(?:では|じゃ)(?:ありません|ない|なく|ございません)|ジャンク扱い(?:は|を)?(?:しません|していません)/g;
+function junkIn(text) {
+  const t = String(text || '').normalize('NFKC').replace(/\s+/g, '').replace(JUNK_NEGATION, '');
+  return t.includes('ジャンク') ? 'ジャンク' : null;
+}
+
 // 説明文・タイトルにあれば「動作する」と書いてある扱い（電源オフの写真しかなくても △ にする）
 const WORKING_TEXT_WORDS = [
   '動作品', '動作確認済', '動作確認しました', '動作確認ずみ', '完動品', '動作良好', '動作問題なし',
@@ -214,51 +233,53 @@ async function askAi(images) {
 // ── 1件の判定 ──────────────────────────────────────────────
 
 async function inspectOne({ link, model, title }) {
-  const junkOk = JUNK_OK_MODELS.includes(model);
+  const isSp = model === 'ゲームボーイアドバンスSP';
+  const isGba = model === 'ゲームボーイアドバンス';
   const isMercari = /mercari\.com/.test(link);
   const page = isMercari ? await fetchMercari(link) : await fetchYahoo(link);
   if (page.ended) return { verdict: 'ng', reason: '終了・売り切れ', ended: true };
 
   const text = `${title || ''}\n${page.description || ''}`;
   const images = (page.images || []).slice(0, MAX_IMAGES);
-  const base = { images, firstImage: images[0] || null };
+  // 判定ルールを変えたときに商品ページを読み直さなくて済むよう、説明文と状態も保存しておく
+  const base = { images, firstImage: images[0] || null, condition: page.condition || '', desc: String(page.description || '').slice(0, 3000) };
   const working = workingWordIn(text);
 
-  // GBA SP：基板なし系の記載だけで決める。写真は一覧に点灯写真を出すためだけにAIに見せる
-  const isSp = model === 'ゲームボーイアドバンスSP';
+  // ── ルールだけで決まるもの（写真は見ない） ──
+  const spOk = { verdict: 'ok', reason: 'SP：基板なしの記載なし' };
+  const gbaOk = { verdict: 'ok', reason: `GBA：「${working}」の記載あり` };
   if (isSp) {
     const noBoard = spRules.ngWordIn(text);
     if (noBoard) return Object.assign(base, { verdict: 'ng', reason: `「${noBoard}」の記載あり`, by: 'text' });
-  }
-
-  // 1. キーワードで × （GBA / GBA SP は除く）
-  if (!junkOk) {
-    const ng = findWord(text, NG_TEXT_WORDS);
+  } else if (!isGba) {
+    const bad = badCondition(page.condition);
+    if (bad) return Object.assign(base, { verdict: 'ng', reason: `状態が「${bad}」`, by: 'text' });
+    const ng = findWord(text, NG_TEXT_WORDS) || junkIn(text);
     if (ng) return Object.assign(base, { verdict: 'ng', reason: `説明文に「${ng}」`, by: 'text' });
   }
 
-  // 2. 写真を AI に見せる
-  const spOk = { verdict: 'ok', reason: 'SP：基板なしの記載なし' };
-  if (!ANTHROPIC_API_KEY) {
-    if (isSp) return Object.assign(base, spOk, { by: 'text' });
-    return Object.assign(base, { verdict: 'unknown', reason: 'AI未設定（ANTHROPIC_API_KEY）', by: 'none', noCache: true });
-  }
+  // ── 写真を AI に見せる ──
+  // SP と（動作確認の記載がある）GBA は判定がもう決まっている。写真は一覧に点灯写真を出すためだけに見せる
+  const fixed = isSp ? spOk : (isGba && working ? gbaOk : null);
+  const noAi = (reason, extra) => {
+    if (fixed) return Object.assign(base, fixed, { by: 'text' });
+    if (isGba) return Object.assign(base, { verdict: 'maybe', reason: `GBA：動作確認の記載なし（${reason}）`, by: 'text' }, extra);
+    return Object.assign(base, { verdict: 'unknown', reason, by: 'none', noCache: true }, extra);
+  };
+  if (!ANTHROPIC_API_KEY) return noAi('AI未設定（ANTHROPIC_API_KEY）');
   if (!images.length) {
-    if (isSp) return Object.assign(base, spOk, { by: 'text' });
-    return Object.assign(base, { verdict: working ? 'maybe' : (junkOk ? 'maybe' : 'ng'), reason: '写真なし', by: 'text' });
+    if (fixed || isGba) return noAi('写真なし', { noCache: false });
+    return Object.assign(base, { verdict: working ? 'maybe' : 'ng', reason: '写真なし', by: 'text' });
   }
-  const loaded = (await Promise.all(images.map(loadImage)));
+  const loaded = await Promise.all(images.map(loadImage));
   const usable = [];
   loaded.forEach((img, i) => { if (img) usable.push({ img, src: images[i] }); });
-  if (!usable.length) {
-    if (isSp) return Object.assign(base, spOk, { by: 'text' });
-    return Object.assign(base, { verdict: 'unknown', reason: '写真を読み込めませんでした', by: 'none', noCache: true });
-  }
+  if (!usable.length) return noAi('写真を読み込めませんでした', isGba && !fixed ? { noCache: true } : {});
   let ai;
   try {
     ai = await askAi(usable.map((u) => u.img));
   } catch (e) {
-    if (isSp) return Object.assign(base, spOk, { by: 'text' }); // SP は写真が見られなくても判定は変わらない
+    if (fixed) return Object.assign(base, fixed, { by: 'text' });
     throw e;
   }
   const idx = Number.isInteger(ai.screen_on_index) && usable[ai.screen_on_index] ? ai.screen_on_index : null;
@@ -270,30 +291,50 @@ async function inspectOne({ link, model, title }) {
     comment: String(ai.comment || '').slice(0, 60),
   });
 
-  if (isSp) return Object.assign(out, spOk);
-  if (ai.cracked && !junkOk) return Object.assign(out, { verdict: 'ng', reason: '画面割れの疑い' });
-  if (ai.screen_dead && !junkOk) return Object.assign(out, { verdict: 'ng', reason: '液晶が死んでいる疑い' });
+  if (fixed) return Object.assign(out, fixed);
+  if (isGba) {
+    if (screenImage) return Object.assign(out, { verdict: 'ok', reason: '画面点灯の写真あり' });
+    return Object.assign(out, { verdict: 'maybe', reason: 'GBA：点灯写真も動作確認の記載もなし' });
+  }
+  if (ai.cracked) return Object.assign(out, { verdict: 'ng', reason: '画面割れの疑い' });
+  if (ai.screen_dead) return Object.assign(out, { verdict: 'ng', reason: '液晶が死んでいる疑い' });
   if (screenImage) return Object.assign(out, { verdict: 'ok', reason: '画面点灯の写真あり' });
   if (working) return Object.assign(out, { verdict: 'maybe', reason: `電源オフの写真のみ（「${working}」の記載あり）` });
-  if (junkOk) return Object.assign(out, { verdict: 'maybe', reason: '電源オフの写真のみ（GBA系なので残す）' });
   return Object.assign(out, { verdict: 'ng', reason: '画面点灯の写真も動作の記載もなし' });
 }
 
-// v1 → v2 で変わったのは GBA SP の判定だけ。それ以外の機種は v1 の結果をそのまま使い、
-// 商品ページを読み直さない（全件を読み直すとヤフオクに断られるため）
-const OLD_CACHE_PREFIX = 'inspect:v1:';
+// 古い版の判定を新しいルールに読み替える（全件の商品ページを読み直すとヤフオクに断られるため）。
+//   SP     … v2 と同じルールなのでそのまま（v1 は SP のルールが違うので使わない）
+//   GBA    … 「動作確認の記載あり」で △ だったものを ◎ にする
+//   その他 … 検索の時点で「やや傷や汚れあり」までに絞っているので状態はそのまま。
+//            説明文の「ジャンク」チェックは新しく判定する出品から効く（古い判定は長くても14日で消える）
+const OLD_CACHE_PREFIXES = ['inspect:v2:', 'inspect:v1:'];
+
+function migrate(old, model, prefix) {
+  if (!old || old.by === 'error' || old.verdict === 'unknown') return null;
+  if (model === 'ゲームボーイアドバンスSP') return prefix === 'inspect:v2:' ? old : null;
+  if (model === 'ゲームボーイアドバンス') {
+    const m = String(old.reason || '').match(/「([^」]+)」の記載あり/);
+    if (old.verdict !== 'ok' && m) return Object.assign({}, old, { verdict: 'ok', reason: `GBA：「${m[1]}」の記載あり` });
+    if (old.verdict === 'maybe') return Object.assign({}, old, { reason: 'GBA：点灯写真も動作確認の記載もなし' });
+    return old;
+  }
+  return old;
+}
 
 async function inspectCached(item, fresh) {
-  const key = CACHE_PREFIX + idOf(item.link);
+  const id = idOf(item.link);
+  const key = CACHE_PREFIX + id;
   if (!fresh) {
     try {
       const hit = await redisCommand('GET', key);
       if (hit) return Object.assign(JSON.parse(hit), { cached: true });
-      if (item.model !== 'ゲームボーイアドバンスSP') {
-        const old = await redisCommand('GET', OLD_CACHE_PREFIX + idOf(item.link));
-        if (old && JSON.parse(old).by !== 'error') {
-          await redisCommand('SET', key, old, 'EX', CACHE_TTL_SEC);
-          return Object.assign(JSON.parse(old), { cached: true });
+      for (const prefix of OLD_CACHE_PREFIXES) {
+        const old = await redisCommand('GET', prefix + id);
+        const moved = old && migrate(JSON.parse(old), item.model, prefix);
+        if (moved) {
+          await redisCommand('SET', key, JSON.stringify(moved), 'EX', CACHE_TTL_SEC);
+          return Object.assign(moved, { cached: true });
         }
       }
     } catch (e) { /* 保存先が使えなくても判定は続ける */ }
@@ -344,4 +385,4 @@ module.exports = async (req, res) => {
   }
 };
 
-module.exports._test = { findWord, workingWordIn, idOf, smallUrl, NG_TEXT_WORDS };
+module.exports._test = { findWord, workingWordIn, idOf, smallUrl, NG_TEXT_WORDS, badCondition, junkIn, migrate };
