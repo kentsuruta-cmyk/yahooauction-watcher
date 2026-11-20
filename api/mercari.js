@@ -137,9 +137,9 @@ const MODELS = [
     categories: [7022, 8885], // 本体(3DS) / 本体(New 3DS)
     query: '3DS 本体 -ジャンク -動作未確認 -通電未確認',
     excludeWords: ['LL'],
-    // 総額（送料込み）で 9500〜11000円
-    priceLimits: { '中古': 11000 },
-    priceMins: { '中古': 9500 },
+    // 総額（送料込み）で 9800円以上 11000円未満（2026-11-20 Kenさん指示。ヤフオクの即決と同じ）
+    priceLimits: { '中古': 10999 },
+    priceMins: { '中古': 9800 },
     excludeJunk: true,
     // 状態は「やや傷や汚れあり」まで（メルカリの itemConditionId 2〜4）
     searchTypes: [{ status: '中古', istatus: '3,4,5' }],

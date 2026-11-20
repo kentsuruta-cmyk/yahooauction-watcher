@@ -94,6 +94,8 @@ const MODELS = [
     excludeWords: ['LL'],
     // 総額（落札価格＋送料）で11000円まで
     priceLimits: { '中古': 11000 },
+    // 即決の出品（Yahoo!フリマ・定額）は総額 9800円以上 11000円未満（2026-11-20 Kenさん指示）。オークションは上の上限だけ
+    fixedPriceRange: { min: 9800, below: 11000 },
     excludeJunk: true,
     // 状態は「やや傷や汚れあり」まで（6:傷や汚れあり / 7:全体的に状態が悪い は除外）
     searchTypes: [{ status: '中古', istatus: '3,4,5' }],
@@ -276,6 +278,12 @@ async function collect(onlyModel) {
           if (model.priceMins) {
             const min = model.priceMins[status];
             if (min !== undefined && finalPrice < min) continue; // 下限未満
+          }
+          // 即決の出品だけの価格の範囲（入札で値段が上がらないので、下限も決められる）
+          if (model.fixedPriceRange && !item.isAuction) {
+            const r = model.fixedPriceRange;
+            if (r.min != null && finalPrice < r.min) continue;
+            if (r.below != null && finalPrice >= r.below) continue;
           }
           results.push({
             model: model.name,
