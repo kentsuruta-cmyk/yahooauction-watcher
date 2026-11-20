@@ -357,6 +357,12 @@ const OLD_CACHE_PREFIXES = ['inspect:v5:', 'inspect:v4:', 'inspect:v3:', 'inspec
 
 function migrate(old, model, prefix) {
   if (!old || old.by === 'error' || old.verdict === 'unknown') return null;
+  // 2026-11-20 15:09 まで（v5 の途中まで）は AI に写真を6枚しか見せていなかった。
+  // 「点灯の写真なし」で × にした古い判定は、7枚目以降に起動画面があるかもしれないので読み直す。
+  // 写真が6枚未満の出品は全部見ているので、そのまま使ってよい。
+  // 確認に使った出品：o1252970724（DSi LL・7枚目に起動画面 → 古い判定は×、読み直すと◎）
+  if (old.verdict === 'ng' && /点灯の写真.*なし/.test(old.reason || '') &&
+      !(Array.isArray(old.images) && old.images.length < 6)) return null;
   // v5 → v6：変わったのは説明文の読み飛ばしだけ。説明文の語で × になったものだけ読み直す
   if (prefix === 'inspect:v5:') return /^説明文に「/.test(old.reason || '') ? null : old;
   // 説明文が途中までしか読めていなかったので（v4 まで）、全文を読むと判定が変わりうるものは読み直す。
