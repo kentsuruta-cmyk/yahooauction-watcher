@@ -27,7 +27,8 @@ const ANTHROPIC_MODEL = process.env.ANTHROPIC_MODEL || 'claude-haiku-5-5';
 // 判定ルールを変えたら版を上げる（古い判定を使い回さないため）。
 // v2: GBA SP は基板なしの記載が無ければ ◎ ／ v3: GBA は動作確認の記載があれば ◎、その他は状態とジャンク記載で ×
 // v4: その他は点灯写真が無ければ × ／ v5: ヤフオクの説明文を全文で読む（v4 までは冒頭だけだった）
-const CACHE_PREFIX = 'inspect:v5:';
+// v6: 【A】【B】【C】【D】のようなランク説明の表も読み飛ばす
+const CACHE_PREFIX = 'inspect:v6:';
 const CACHE_TTL_SEC = 14 * 24 * 60 * 60;
 const MAX_ITEMS_PER_CALL = 8;
 const MAX_IMAGES = 10; // AIに見せる写真の枚数（ヤフオクの上限10枚を全部。6枚だと後ろの起動画面を見落とした：2026-11-20）
@@ -157,10 +158,11 @@ function htmlToText(html) {
 
 // ストアの説明文によくある「状態の説明表」（例：「状態10 新品…」「状態2 …ジャンク品扱い」「状態1 基本的にジャンク品…」）を取り除く。
 // 表の中の「ジャンク」「動作未確認」で、きれいな出品まで × にしないため。
-// 「状態」「ランク」＋数字が短い間隔で3つ以上続いている部分を表とみなす（その出品1件だけの「状態 1」などは残る）
+// 「状態」「ランク」＋数字や【A】【B】のような印が、短い間隔で3つ以上続いている部分を表とみなす（その出品1件だけの「状態 1」などは残る）
 function stripConditionLegend(text) {
   let t = String(text || '').normalize('NFKC');
-  const re = /(?:状態|ランク)\s*\d{1,2}(?![\d])/g;
+  // 「状態1」「ランク3」のような数字の表と、「【A】【B】【C】【D】」「Sランク Aランク…」のような英字の表の両方を見る
+  const re = /(?:状態|ランク)\s*\d{1,2}(?![\d])|【\s*[SABCDEJ][+＋]?\s*】|(?:^|[\s　])[SABCDE][+＋]?\s*ランク/g;
   for (let guard = 0; guard < 5; guard++) {
     const marks = [];
     let m;
@@ -348,10 +350,12 @@ async function inspectOne({ link, model, title }) {
 
 // 古い版の判定のうち、新しいルールでも変わらないものだけを使い回す（全件の商品ページを読み直すとヤフオクに断られるため）。
 // どれを使い回すかは migrate() を参照
-const OLD_CACHE_PREFIXES = ['inspect:v4:', 'inspect:v3:', 'inspect:v2:', 'inspect:v1:'];
+const OLD_CACHE_PREFIXES = ['inspect:v5:', 'inspect:v4:', 'inspect:v3:', 'inspect:v2:', 'inspect:v1:'];
 
-function migrate(old, model) {
+function migrate(old, model, prefix) {
   if (!old || old.by === 'error' || old.verdict === 'unknown') return null;
+  // v5 → v6：変わったのは説明文の読み飛ばしだけ。説明文の語で × になったものだけ読み直す
+  if (prefix === 'inspect:v5:') return /^説明文に「/.test(old.reason || '') ? null : old;
   // 説明文が途中までしか読めていなかったので（v4 まで）、全文を読むと判定が変わりうるものは読み直す。
   // 使い回すのは、全文を読んでも変わらないものだけ：
   //   × … 見えていた部分だけで × なら、全文でも ×（GBA・SP は × の理由が残るので同じ）
@@ -372,7 +376,7 @@ async function inspectCached(item, fresh) {
       if (hit) return Object.assign(JSON.parse(hit), { cached: true });
       for (const prefix of OLD_CACHE_PREFIXES) {
         const old = await redisCommand('GET', prefix + id);
-        const moved = old && migrate(JSON.parse(old), item.model);
+        const moved = old && migrate(JSON.parse(old), item.model, prefix);
         if (moved) {
           await redisCommand('SET', key, JSON.stringify(moved), 'EX', CACHE_TTL_SEC);
           return Object.assign(moved, { cached: true });
