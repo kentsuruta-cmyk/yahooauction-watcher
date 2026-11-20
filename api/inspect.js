@@ -334,6 +334,7 @@ async function inspectOne({ link, model, title }) {
     comment: String(ai.comment || '').slice(0, 60),
   });
 
+  if (isGba && screenImage) return Object.assign(out, { verdict: 'ok', reason: '画面点灯の写真あり' });
   if (fixed) return Object.assign(out, fixed);
   if (isGba) {
     if (screenImage) return Object.assign(out, { verdict: 'ok', reason: '画面点灯の写真あり' });
