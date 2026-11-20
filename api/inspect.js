@@ -26,8 +26,8 @@ const ANTHROPIC_API_KEY = process.env.ANTHROPIC_API_KEY;
 const ANTHROPIC_MODEL = process.env.ANTHROPIC_MODEL || 'claude-haiku-5-5';
 // 判定ルールを変えたら版を上げる（古い判定を使い回さないため）。
 // v2: GBA SP は基板なしの記載が無ければ ◎ ／ v3: GBA は動作確認の記載があれば ◎、その他は状態とジャンク記載で ×
-// v4: その他は点灯写真が無ければ ×
-const CACHE_PREFIX = 'inspect:v4:';
+// v4: その他は点灯写真が無ければ × ／ v5: ヤフオクの説明文を全文で読む（v4 までは冒頭だけだった）
+const CACHE_PREFIX = 'inspect:v5:';
 const CACHE_TTL_SEC = 14 * 24 * 60 * 60;
 const MAX_ITEMS_PER_CALL = 8;
 const MAX_IMAGES = 6; // AIに見せる写真の枚数（先頭から）
@@ -119,7 +119,11 @@ async function fetchYahoo(link) {
     const it = auc && auc.item;
     if (it) {
       images = (it.img || []).map((x) => x && x.image).filter(Boolean);
-      description = Array.isArray(it.description) ? it.description.join('\n') : String(it.description || '');
+      // description（文字列の配列）は冒頭の数行だけで「...」で切れている（2026-11-20 に確認）。
+      // 全文は descriptionHtml にあるので、そちらを優先する
+      const short = Array.isArray(it.description) ? it.description.join('\n') : String(it.description || '');
+      const full = htmlToText(it.descriptionHtml);
+      description = full.length > short.length ? full : short;
       condition = it.conditionName || '';
     }
     const flea = (((ps.initialState || (ps.pageProps || {}).initialState || {}).itemsState || {}).items || {}).item;
@@ -141,6 +145,41 @@ async function fetchMercari(link) {
   if (item.status && item.status !== 'on_sale') return { ended: true };
   const images = (item.photos || item.thumbnails || []).map((p) => (typeof p === 'string' ? p : p && (p.url || p.uri))).filter(Boolean);
   return { images, description: String(item.description || ''), condition: (item.item_condition || {}).name || '' };
+}
+
+function htmlToText(html) {
+  return String(html || '')
+    .replace(/<script[\s\S]*?<\/script>/gi, ' ').replace(/<style[\s\S]*?<\/style>/gi, ' ')
+    .replace(/<br\s*\/?>/gi, '\n').replace(/<\/(p|div|tr|li|h\d)>/gi, '\n').replace(/<[^>]+>/g, ' ')
+    .replace(/&nbsp;/g, ' ').replace(/&amp;/g, '&').replace(/&lt;/g, '<').replace(/&gt;/g, '>').replace(/&quot;/g, '"')
+    .replace(/[ \t]+/g, ' ').trim();
+}
+
+// ストアの説明文によくある「状態の説明表」（例：「状態10 新品…」「状態2 …ジャンク品扱い」「状態1 基本的にジャンク品…」）を取り除く。
+// 表の中の「ジャンク」「動作未確認」で、きれいな出品まで × にしないため。
+// 「状態」「ランク」＋数字が短い間隔で3つ以上続いている部分を表とみなす（その出品1件だけの「状態 1」などは残る）
+function stripConditionLegend(text) {
+  let t = String(text || '').normalize('NFKC');
+  const re = /(?:状態|ランク)\s*\d{1,2}(?![\d])/g;
+  for (let guard = 0; guard < 5; guard++) {
+    const marks = [];
+    let m;
+    re.lastIndex = 0;
+    while ((m = re.exec(t))) marks.push(m.index);
+    let start = -1;
+    let i = 0;
+    for (; i + 2 < marks.length; i++) {
+      if (marks[i + 2] - marks[i] < 400) { start = marks[i]; break; }
+    }
+    if (start < 0) break;
+    let j = i + 2;
+    while (j + 1 < marks.length && marks[j + 1] - marks[j] < 250) j++;
+    const after = t.slice(marks[j]);
+    const nl = after.search(/\n/);
+    const end = marks[j] + Math.min(nl < 0 ? after.length : nl, 200);
+    t = t.slice(0, start) + ' ' + t.slice(end);
+  }
+  return t;
 }
 
 // ヤフオクの写真は縮小サーバー経由で取る（AIに送るデータ量とコストを抑える）
@@ -245,7 +284,9 @@ async function inspectOne({ link, model, title }) {
   const images = (page.images || []).slice(0, MAX_IMAGES);
   // 判定ルールを変えたときに商品ページを読み直さなくて済むよう、説明文と状態も保存しておく
   const base = { images, firstImage: images[0] || null, condition: page.condition || '', desc: String(page.description || '').slice(0, 3000) };
-  const working = workingWordIn(text);
+  // ストアの状態説明の表は、ジャンク・動作確認のどちらの判定にも使わない
+  const body = stripConditionLegend(text);
+  const working = workingWordIn(body);
 
   // ── ルールだけで決まるもの（写真は見ない） ──
   const spOk = { verdict: 'ok', reason: 'SP：基板なしの記載なし' };
@@ -256,7 +297,7 @@ async function inspectOne({ link, model, title }) {
   } else if (!isGba) {
     const bad = badCondition(page.condition);
     if (bad) return Object.assign(base, { verdict: 'ng', reason: `状態が「${bad}」`, by: 'text' });
-    const ng = findWord(text, NG_TEXT_WORDS) || junkIn(text);
+    const ng = findWord(body, NG_TEXT_WORDS) || junkIn(body);
     if (ng) return Object.assign(base, { verdict: 'ng', reason: `説明文に「${ng}」`, by: 'text' });
   }
 
@@ -304,24 +345,21 @@ async function inspectOne({ link, model, title }) {
   return Object.assign(out, { verdict: 'ng', reason: '画面点灯の写真なし' });
 }
 
-// 古い版の判定を新しいルールに読み替える（全件の商品ページを読み直すとヤフオクに断られるため）。
-//   SP     … v2 と同じルールなのでそのまま（v1 は SP のルールが違うので使わない）
-//   GBA    … 「動作確認の記載あり」で △ だったものを ◎ にする
-//   その他 … △（電源オフの写真のみ）だったものは × にする。状態は検索の時点で「やや傷や汚れあり」までに絞っている。
-//            説明文の「ジャンク」チェックは新しく判定する出品から効く（古い判定は長くても14日で消える）
-const OLD_CACHE_PREFIXES = ['inspect:v3:', 'inspect:v2:', 'inspect:v1:'];
+// 古い版の判定のうち、新しいルールでも変わらないものだけを使い回す（全件の商品ページを読み直すとヤフオクに断られるため）。
+// どれを使い回すかは migrate() を参照
+const OLD_CACHE_PREFIXES = ['inspect:v4:', 'inspect:v3:', 'inspect:v2:', 'inspect:v1:'];
 
-function migrate(old, model, prefix) {
+function migrate(old, model) {
   if (!old || old.by === 'error' || old.verdict === 'unknown') return null;
-  if (model === 'ゲームボーイアドバンスSP') return prefix === 'inspect:v1:' ? null : old;
-  if (model === 'ゲームボーイアドバンス') {
-    const m = String(old.reason || '').match(/「([^」]+)」の記載あり/);
-    if (old.verdict !== 'ok' && m) return Object.assign({}, old, { verdict: 'ok', reason: `GBA：「${m[1]}」の記載あり` });
-    if (old.verdict === 'maybe') return Object.assign({}, old, { reason: 'GBA：点灯写真も動作確認の記載もなし' });
-    return old;
+  // 説明文が途中までしか読めていなかったので（v4 まで）、全文を読むと判定が変わりうるものは読み直す。
+  // 使い回すのは、全文を読んでも変わらないものだけ：
+  //   × … 見えていた部分だけで × なら、全文でも ×（GBA・SP は × の理由が残るので同じ）
+  //   GBA で画面点灯の写真あり … 説明文に関係なく ◎
+  if (old.verdict === 'ng' && model !== 'ゲームボーイアドバンス') return old;
+  if (model === 'ゲームボーイアドバンス' && old.screenImage) {
+    return Object.assign({}, old, { verdict: 'ok', reason: '画面点灯の写真あり' });
   }
-  if (old.verdict === 'maybe') return Object.assign({}, old, { verdict: 'ng', reason: '画面点灯の写真なし' });
-  return old;
+  return null;
 }
 
 async function inspectCached(item, fresh) {
@@ -333,7 +371,7 @@ async function inspectCached(item, fresh) {
       if (hit) return Object.assign(JSON.parse(hit), { cached: true });
       for (const prefix of OLD_CACHE_PREFIXES) {
         const old = await redisCommand('GET', prefix + id);
-        const moved = old && migrate(JSON.parse(old), item.model, prefix);
+        const moved = old && migrate(JSON.parse(old), item.model);
         if (moved) {
           await redisCommand('SET', key, JSON.stringify(moved), 'EX', CACHE_TTL_SEC);
           return Object.assign(moved, { cached: true });
@@ -387,4 +425,4 @@ module.exports = async (req, res) => {
   }
 };
 
-module.exports._test = { findWord, workingWordIn, idOf, smallUrl, NG_TEXT_WORDS, badCondition, junkIn, migrate };
+module.exports._test = { findWord, workingWordIn, idOf, smallUrl, NG_TEXT_WORDS, badCondition, junkIn, migrate, stripConditionLegend, htmlToText };
