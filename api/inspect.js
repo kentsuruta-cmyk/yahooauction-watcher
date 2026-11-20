@@ -9,7 +9,8 @@
 //   GBA SP … 状態が悪くても・画面が点いた写真がなくても・動作未確認でも、「基板なし」系の記載が無ければ ◎（あれば ×）
 //   GBA    … 画面が点いた写真があれば ◎。無くても「動作確認済」などの記載があれば ◎。どちらも無ければ △（× にはしない）
 //   その他 … ジャンクは売れない。状態が「傷や汚れあり」「全体的に状態が悪い」は無条件で ×。
-//            「やや傷や汚れあり」までであっても、ジャンク・動作未確認などの記載があれば ×
+//            「やや傷や汚れあり」までであっても、ジャンク・動作未確認などの記載があれば ×。
+//            画面が点いた写真が無ければ、「動作品」と書いてあっても ×（△ は使わない）
 //
 // 1. 説明文とタイトルのキーワードで先にふるう（無料）
 // 2. 残ったものだけ、写真を AI（Claude）に見せて判定する
@@ -25,7 +26,8 @@ const ANTHROPIC_API_KEY = process.env.ANTHROPIC_API_KEY;
 const ANTHROPIC_MODEL = process.env.ANTHROPIC_MODEL || 'claude-haiku-5-5';
 // 判定ルールを変えたら版を上げる（古い判定を使い回さないため）。
 // v2: GBA SP は基板なしの記載が無ければ ◎ ／ v3: GBA は動作確認の記載があれば ◎、その他は状態とジャンク記載で ×
-const CACHE_PREFIX = 'inspect:v3:';
+// v4: その他は点灯写真が無ければ ×
+const CACHE_PREFIX = 'inspect:v4:';
 const CACHE_TTL_SEC = 14 * 24 * 60 * 60;
 const MAX_ITEMS_PER_CALL = 8;
 const MAX_IMAGES = 6; // AIに見せる写真の枚数（先頭から）
@@ -269,7 +271,7 @@ async function inspectOne({ link, model, title }) {
   if (!ANTHROPIC_API_KEY) return noAi('AI未設定（ANTHROPIC_API_KEY）');
   if (!images.length) {
     if (fixed || isGba) return noAi('写真なし', { noCache: false });
-    return Object.assign(base, { verdict: working ? 'maybe' : 'ng', reason: '写真なし', by: 'text' });
+    return Object.assign(base, { verdict: 'ng', reason: '写真なし', by: 'text' });
   }
   const loaded = await Promise.all(images.map(loadImage));
   const usable = [];
@@ -299,26 +301,26 @@ async function inspectOne({ link, model, title }) {
   if (ai.cracked) return Object.assign(out, { verdict: 'ng', reason: '画面割れの疑い' });
   if (ai.screen_dead) return Object.assign(out, { verdict: 'ng', reason: '液晶が死んでいる疑い' });
   if (screenImage) return Object.assign(out, { verdict: 'ok', reason: '画面点灯の写真あり' });
-  if (working) return Object.assign(out, { verdict: 'maybe', reason: `電源オフの写真のみ（「${working}」の記載あり）` });
-  return Object.assign(out, { verdict: 'ng', reason: '画面点灯の写真も動作の記載もなし' });
+  return Object.assign(out, { verdict: 'ng', reason: '画面点灯の写真なし' });
 }
 
 // 古い版の判定を新しいルールに読み替える（全件の商品ページを読み直すとヤフオクに断られるため）。
 //   SP     … v2 と同じルールなのでそのまま（v1 は SP のルールが違うので使わない）
 //   GBA    … 「動作確認の記載あり」で △ だったものを ◎ にする
-//   その他 … 検索の時点で「やや傷や汚れあり」までに絞っているので状態はそのまま。
+//   その他 … △（電源オフの写真のみ）だったものは × にする。状態は検索の時点で「やや傷や汚れあり」までに絞っている。
 //            説明文の「ジャンク」チェックは新しく判定する出品から効く（古い判定は長くても14日で消える）
-const OLD_CACHE_PREFIXES = ['inspect:v2:', 'inspect:v1:'];
+const OLD_CACHE_PREFIXES = ['inspect:v3:', 'inspect:v2:', 'inspect:v1:'];
 
 function migrate(old, model, prefix) {
   if (!old || old.by === 'error' || old.verdict === 'unknown') return null;
-  if (model === 'ゲームボーイアドバンスSP') return prefix === 'inspect:v2:' ? old : null;
+  if (model === 'ゲームボーイアドバンスSP') return prefix === 'inspect:v1:' ? null : old;
   if (model === 'ゲームボーイアドバンス') {
     const m = String(old.reason || '').match(/「([^」]+)」の記載あり/);
     if (old.verdict !== 'ok' && m) return Object.assign({}, old, { verdict: 'ok', reason: `GBA：「${m[1]}」の記載あり` });
     if (old.verdict === 'maybe') return Object.assign({}, old, { reason: 'GBA：点灯写真も動作確認の記載もなし' });
     return old;
   }
+  if (old.verdict === 'maybe') return Object.assign({}, old, { verdict: 'ng', reason: '画面点灯の写真なし' });
   return old;
 }
 

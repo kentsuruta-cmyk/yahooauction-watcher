@@ -639,7 +639,7 @@ var verdictFilter = 'hideNg';
 
 var VERDICTS = {
   ok: { mark: '◎', label: '画面点灯あり', cls: 'v-ok' },
-  maybe: { mark: '△', label: '動作記載のみ', cls: 'v-maybe' },
+  maybe: { mark: '△', label: 'GBA 要確認', cls: 'v-maybe' },
   ng: { mark: '×', label: '除外', cls: 'v-ng' },
   unknown: { mark: '?', label: '判定できず', cls: 'v-unknown' },
 };
@@ -667,7 +667,7 @@ function buildVerdictBtns(items) {
   var defs = [
     ['hideNg', '◎△（×を隠す） ' + (items.length - c.ng)],
     ['ok', '◎ 仕入れ候補 ' + c.ok],
-    ['maybe', '△ 動作記載のみ ' + c.maybe],
+    ['maybe', '△ GBA要確認 ' + c.maybe],
     ['ng', '× 除外 ' + c.ng],
     ['pending', '未判定 ' + c.pending],
     ['all', 'すべて ' + items.length],
