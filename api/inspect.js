@@ -30,7 +30,7 @@ const ANTHROPIC_MODEL = process.env.ANTHROPIC_MODEL || 'claude-haiku-5-5';
 const CACHE_PREFIX = 'inspect:v5:';
 const CACHE_TTL_SEC = 14 * 24 * 60 * 60;
 const MAX_ITEMS_PER_CALL = 8;
-const MAX_IMAGES = 6; // AIに見せる写真の枚数（先頭から）
+const MAX_IMAGES = 10; // AIに見せる写真の枚数（ヤフオクの上限10枚を全部。6枚だと後ろの起動画面を見落とした：2026-11-20）
 
 // ジャンクでも仕入れる機種（× にしない）
 
