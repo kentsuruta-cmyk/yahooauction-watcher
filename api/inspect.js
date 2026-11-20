@@ -149,7 +149,8 @@ async function fetchMercari(link) {
 }
 
 function htmlToText(html) {
-  return String(html || '')
+  // HTMLのソース中の改行には意味がないので先に空白にまとめ、<br> や行・段落の終わりだけを改行にする
+  return String(html || '').replace(/\s+/g, ' ')
     .replace(/<script[\s\S]*?<\/script>/gi, ' ').replace(/<style[\s\S]*?<\/style>/gi, ' ')
     .replace(/<br\s*\/?>/gi, '\n').replace(/<\/(p|div|tr|li|h\d)>/gi, '\n').replace(/<[^>]+>/g, ' ')
     .replace(/&nbsp;/g, ' ').replace(/&amp;/g, '&').replace(/&lt;/g, '<').replace(/&gt;/g, '>').replace(/&quot;/g, '"')
@@ -176,9 +177,11 @@ function stripConditionLegend(text) {
     if (start < 0) break;
     let j = i + 2;
     while (j + 1 < marks.length && marks[j + 1] - marks[j] < 250) j++;
+    // 最後の印の説明文（印のあとの空白・改行を飛ばして、その行の終わりまで）も表に含める
     const after = t.slice(marks[j]);
-    const nl = after.search(/\n/);
-    const end = marks[j] + Math.min(nl < 0 ? after.length : nl, 200);
+    const lead = after.match(/^\S+[\s]*/)[0].length;
+    const nl = after.slice(lead).search(/\n/);
+    const end = marks[j] + lead + Math.min(nl < 0 ? after.length - lead : nl, 200);
     t = t.slice(0, start) + ' ' + t.slice(end);
   }
   return t;
