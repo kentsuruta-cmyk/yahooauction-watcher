@@ -96,12 +96,12 @@ function nextData(html) {
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
 // 続けて読みに行くとヤフオクが一時的に HTTP 500 を返す（2026-11-19、16件同時で約4分の1が失敗）。
-// 少し待って2回までやり直す
+// 少し待って3回までやり直す（2026-11-22：アメリカのサーバーからだと断られやすかったので、東京（hnd1）で動かす）
 async function fetchPage(link) {
   for (let attempt = 0; ; attempt++) {
     const res = await fetch(link, { headers: { 'User-Agent': UA, 'Accept-Language': 'ja,en;q=0.9' } });
-    if (res.ok || res.status === 404 || attempt >= 2 || (res.status < 500 && res.status !== 429)) return res;
-    await sleep(1500 * (attempt + 1) + Math.random() * 1000);
+    if (res.ok || res.status === 404 || attempt >= 3 || (res.status < 500 && res.status !== 429)) return res;
+    await sleep(2000 * (attempt + 1) + Math.random() * 1500);
   }
 }
 

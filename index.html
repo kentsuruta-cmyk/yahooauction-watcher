@@ -395,7 +395,7 @@ function renderTable(items) {
     var insp = inspectMap[auctionId];
     rows += '<tr class="' + (checked ? 'checked' : '') + (insp && insp.verdict === 'ng' ? ' verdict-ng' : '') + '" id="row' + i + '">' +
       '<td><button class="check-btn ' + (checked ? 'on' : '') + '" onclick="doCheck(\'' + encodedId + '\',' + i + ')">' + (checked ? '✓' : '') + '</button></td>' +
-      '<td>' + photoCell(insp, i) + '</td>' +
+      '<td>' + photoCell(insp, i, auctionId) + '</td>' +
       '<td>' + item.model + '</td>' +
       '<td><a href="' + item.link + '" target="_blank">' + item.title + '</a></td>' +
       '<td>' + getBadge(item.status) + ' ' + getTypeBadge(item) +
@@ -634,6 +634,7 @@ var inspectProgress = { done: 0, total: 0 };
 var inspectAiConfigured = true;
 var inspectTries = {};        // 出品ID → 判定エラーになった回数（3回までやり直す）
 var inspectRetryAt = {};      // 出品ID → この時刻を過ぎたらやり直す
+var inspectOrder = {};        // 出品ID → 判定の順番（何番目に判定するか）
 // 初期表示は「×を隠す」。間違いがないか × のタブもときどき見る
 var verdictFilter = 'hideNg';
 
@@ -693,8 +694,12 @@ function thumbUrl(url, size) {
   return url;
 }
 
-function photoCell(r, i) {
-  if (!r) return '<div class="photo-empty">判定待ち…</div>';
+function photoCell(r, i, id) {
+  if (!r) {
+    var pos = inspectOrder[id];
+    var wait = pos ? '<br><span style="font-size:11px;">あと' + pos + '件目・約' + Math.max(1, Math.ceil(pos / 8)) + '分</span>' : '';
+    return '<div class="photo-empty">判定待ち…' + (inspectRunning ? wait : '') + '</div>';
+  }
   var v = VERDICTS[r.verdict] || VERDICTS.unknown;
   var img = r.screenImage || r.firstImage;
   var html = img
@@ -748,6 +753,10 @@ async function runInspect() {
         // 一時的なエラー（ヤフオクに断られた等）は、少し待って3回までやり直す
         return inspectMap[id].by === 'error' && (inspectTries[id] || 0) < 3 && now >= (inspectRetryAt[id] || 0);
       });
+      // 終了が近い出品から先に判定する（一覧の並び順のままだと、後ろの機種がずっと「判定待ち」になる）
+      todo.sort(function(a, b) { return (a.endAt || 9e15) - (b.endAt || 9e15); });
+      inspectOrder = {};
+      todo.forEach(function(it, k) { inspectOrder[getAuctionId(it.link)] = k + 1; });
       if (!todo.length) {
         // やり直し待ちが残っていれば、時間をおいてもう一度
         var waiting = allItems.some(function(it) {
